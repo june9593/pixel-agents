@@ -193,4 +193,6 @@ export interface Character {
   matrixEffectTimer: number
   /** Per-column random seeds (16 values) for staggered rain timing */
   matrixEffectSeeds: number[]
+  /** Timestamp when a reading tool started (for fast-tool skip logic) */
+  _readingToolStart?: number
 }
