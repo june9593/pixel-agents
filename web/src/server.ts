@@ -225,6 +225,16 @@ function handleWebviewMessage(msg: Record<string, unknown>, ws: WebSocket): void
       // TODO: integrate with kosmos-app deep link / CLI once available
       console.log('[Server] Open agent requested (not yet supported in web mode)')
       break
+    case 'closeAgent': {
+      // Remove agent from watcher and broadcast closure
+      const closedId = msg.id as number
+      const removed = watcher.removeAgentById(closedId)
+      if (removed) {
+        console.log(`[Server] Agent ${closedId} removed`)
+        broadcast({ type: 'agentClosed', id: closedId })
+      }
+      break
+    }
     case 'openSessionsFolder': {
       // Open kosmos-app chat sessions directory in Finder
       const sessionsDir = path.join(KOSMOS_APP_DIR, 'profiles', profile, 'chat_sessions')

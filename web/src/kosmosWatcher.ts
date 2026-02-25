@@ -127,12 +127,38 @@ export class KosmosWatcher extends EventEmitter {
   }
 
   /**
-   * Discover agents from profile.json and register any new ones
+   * Remove an agent by its pixel-agents numeric ID
+   */
+  removeAgentById(agentId: number): boolean {
+    for (const [chatId, watched] of this.watchedAgents) {
+      if (watched.agentId === agentId) {
+        this.watchedAgents.delete(chatId)
+        console.log(`[KosmosWatcher] Removed agent: ${watched.agent.emoji} ${watched.agent.name} (id=${agentId})`)
+        return true
+      }
+    }
+    return false
+  }
+
+  /**
+   * Discover agents from profile.json and register any new ones.
+   * Also detect removed agents and emit agentClosed.
    */
   private discoverAndRegisterAgents(): void {
     const profilePath = path.join(this.profileDir, 'profile.json')
     const agents = discoverAgents(profilePath)
+    const currentChatIds = new Set(agents.map(a => a.chatId))
 
+    // Detect removed agents
+    for (const [chatId, watched] of this.watchedAgents) {
+      if (!currentChatIds.has(chatId)) {
+        console.log(`[KosmosWatcher] Agent removed from profile: ${watched.agent.emoji} ${watched.agent.name}`)
+        this.watchedAgents.delete(chatId)
+        this.emit('message', { type: 'agentClosed', id: watched.agentId })
+      }
+    }
+
+    // Register new agents
     for (const agent of agents) {
       if (!this.watchedAgents.has(agent.chatId)) {
         const agentId = this.nextAgentId++
