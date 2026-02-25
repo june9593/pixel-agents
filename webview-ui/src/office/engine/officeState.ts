@@ -26,9 +26,6 @@ import {
 } from '../layout/layoutSerializer.js'
 import { getCatalogEntry, getOnStateType } from '../layout/furnitureCatalog.js'
 
-/** Tools that trigger walking to the bookshelf area */
-const READING_TOOL_SET = new Set(['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch'])
-
 export class OfficeState {
   layout: OfficeLayout
   tileMap: TileTypeVal[][]
@@ -573,29 +570,6 @@ export class OfficeState {
     const ch = this.characters.get(id)
     if (ch) {
       ch.currentTool = tool
-      // When starting a reading tool, walk to the bookshelf area
-      if (tool && READING_TOOL_SET.has(tool) && ch.isActive) {
-        const bookshelfTiles = [
-          { col: 1, row: 12 }, { col: 2, row: 12 }, { col: 3, row: 12 },
-          { col: 5, row: 12 }, { col: 7, row: 12 }, { col: 8, row: 12 },
-          { col: 9, row: 12 },
-        ]
-        // Pick a valid bookshelf tile
-        const valid = bookshelfTiles.filter(t =>
-          this.walkableTiles.some(w => w.col === t.col && w.row === t.row)
-        )
-        if (valid.length > 0) {
-          const target = valid[Math.floor(Math.random() * valid.length)]
-          const path = findPath(ch.tileCol, ch.tileRow, target.col, target.row, this.tileMap, this.blockedTiles)
-          if (path.length > 0) {
-            ch.path = path
-            ch.moveProgress = 0
-            ch.state = CharacterState.WALK
-            ch.frame = 0
-            ch.frameTimer = 0
-          }
-        }
-      }
     }
   }
 
