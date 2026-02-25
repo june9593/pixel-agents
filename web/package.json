@@ -1,0 +1,26 @@
+{
+  "name": "pixel-agents-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone web version of Pixel Agents - monitors kosmos-app agents",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "build:webview": "cd ../webview-ui && npm run build"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.0",
+    "express": "^4.21.0",
+    "pngjs": "^7.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.0.0",
+    "@types/pngjs": "^6.0.5",
+    "@types/ws": "^8.5.12",
+    "tsx": "^4.19.0",
+    "typescript": "~5.9.3"
+  }
+}

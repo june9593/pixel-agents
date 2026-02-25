@@ -11,6 +11,7 @@ interface AgentLabelsProps {
   zoom: number
   panRef: React.RefObject<{ x: number; y: number }>
   subagentCharacters: SubagentCharacter[]
+  agentNames?: Record<number, { name: string; emoji: string }>
 }
 
 export function AgentLabels({
@@ -21,6 +22,7 @@ export function AgentLabels({
   zoom,
   panRef,
   subagentCharacters,
+  agentNames,
 }: AgentLabelsProps) {
   const [, setTick] = useState(0)
   useEffect(() => {
@@ -78,7 +80,8 @@ export function AgentLabels({
           dotColor = 'var(--vscode-charts-blue, #3794ff)'
         }
 
-        const labelText = subLabelMap.get(id) || `Agent #${id}`
+        const agentInfo = agentNames?.[id]
+        const labelText = subLabelMap.get(id) || (agentInfo ? `${agentInfo.emoji} ${agentInfo.name}` : `Agent #${id}`)
 
         return (
           <div

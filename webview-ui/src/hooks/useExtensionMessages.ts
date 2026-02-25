@@ -44,6 +44,7 @@ export interface ExtensionMessageState {
   subagentCharacters: SubagentCharacter[]
   layoutReady: boolean
   loadedAssets?: { catalog: FurnitureAsset[]; sprites: Record<string, string[][]> }
+  agentNames: Record<number, { name: string; emoji: string }>
 }
 
 function saveAgentSeats(os: OfficeState): void {
@@ -68,6 +69,7 @@ export function useExtensionMessages(
   const [subagentCharacters, setSubagentCharacters] = useState<SubagentCharacter[]>([])
   const [layoutReady, setLayoutReady] = useState(false)
   const [loadedAssets, setLoadedAssets] = useState<{ catalog: FurnitureAsset[]; sprites: Record<string, string[][]> } | undefined>()
+  const [agentNames, setAgentNames] = useState<Record<number, { name: string; emoji: string }>>({})
 
   // Track whether initial layout has been loaded (ref to avoid re-render)
   const layoutReadyRef = useRef(false)
@@ -140,10 +142,21 @@ export function useExtensionMessages(
       } else if (msg.type === 'existingAgents') {
         const incoming = msg.agents as number[]
         const meta = (msg.agentMeta || {}) as Record<number, { palette?: number; hueShift?: number; seatId?: string }>
-        // Buffer agents — they'll be added in layoutLoaded after seats are built
-        for (const id of incoming) {
-          const m = meta[id]
-          pendingAgents.push({ id, palette: m?.palette, hueShift: m?.hueShift, seatId: m?.seatId })
+        if (layoutReadyRef.current) {
+          // Layout already loaded — add agents directly
+          for (const id of incoming) {
+            const m = meta[id]
+            if (!os.characters.has(id)) {
+              os.addAgent(id, m?.palette, m?.hueShift, m?.seatId, true)
+            }
+          }
+          saveAgentSeats(os)
+        } else {
+          // Buffer agents — they'll be added in layoutLoaded after seats are built
+          for (const id of incoming) {
+            const m = meta[id]
+            pendingAgents.push({ id, palette: m?.palette, hueShift: m?.hueShift, seatId: m?.seatId })
+          }
         }
         setAgents((prev) => {
           const ids = new Set(prev)
@@ -330,6 +343,18 @@ export function useExtensionMessages(
       } else if (msg.type === 'settingsLoaded') {
         const soundOn = msg.soundEnabled as boolean
         setSoundEnabled(soundOn)
+      } else if (msg.type === 'kosmosAgentInfo') {
+        // Custom message from web server with agent name/emoji info
+        const agentInfoList = msg.agents as Array<{ id: number; name: string; emoji: string }>
+        if (Array.isArray(agentInfoList)) {
+          setAgentNames((prev) => {
+            const next = { ...prev }
+            for (const info of agentInfoList) {
+              next[info.id] = { name: info.name, emoji: info.emoji }
+            }
+            return next
+          })
+        }
       } else if (msg.type === 'furnitureAssetsLoaded') {
         try {
           const catalog = msg.catalog as FurnitureAsset[]
@@ -348,5 +373,5 @@ export function useExtensionMessages(
     return () => window.removeEventListener('message', handler)
   }, [getOfficeState])
 
-  return { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets }
+  return { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, agentNames }
 }
