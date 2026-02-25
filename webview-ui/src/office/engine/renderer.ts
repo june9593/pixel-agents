@@ -447,6 +447,9 @@ export function renderRotateButton(
 
 // ── Name labels ─────────────────────────────────────────────────
 
+/** Palette-based dot colors for each character skin */
+const PALETTE_COLORS = ['#e06060', '#60a0e0', '#e0c060', '#60c080', '#c070c0', '#e09050']
+
 export function renderNameLabels(
   ctx: CanvasRenderingContext2D,
   characters: Character[],
@@ -454,38 +457,58 @@ export function renderNameLabels(
   offsetY: number,
   zoom: number,
 ): void {
+  if (zoom < 2) return // too small to read
+
   for (const ch of characters) {
     if (!ch.displayName) continue
-    // Skip characters with active matrix effects
     if (ch.matrixEffect) continue
 
-    const sittingOffset = ch.state === CharacterState.TYPE ? CHARACTER_SITTING_OFFSET_PX : 0
-    // Position above character's head
-    const screenX = Math.round(offsetX + ch.x * zoom)
-    const screenY = Math.round(offsetY + (ch.y + sittingOffset) * zoom - 16 * zoom - 4 * zoom)
+    // Strip emoji from display name for cleaner canvas rendering
+    const name = ch.displayName.replace(/[\u{1F000}-\u{1FFFF}]/gu, '').trim()
+    if (!name) continue
 
-    // Use a small pixel-art sized font
-    const fontSize = Math.max(8, Math.round(zoom * 4))
+    const sittingOffset = ch.state === CharacterState.TYPE ? CHARACTER_SITTING_OFFSET_PX : 0
+    const screenX = Math.round(offsetX + ch.x * zoom)
+    const screenY = Math.round(offsetY + (ch.y + sittingOffset) * zoom - 18 * zoom)
+
+    const fontSize = Math.max(7, Math.round(zoom * 3.5))
     ctx.save()
     ctx.font = `${fontSize}px 'FS Pixel Sans', monospace`
     ctx.textAlign = 'center'
-    ctx.textBaseline = 'bottom'
+    ctx.textBaseline = 'middle'
 
-    // Background pill
-    const metrics = ctx.measureText(ch.displayName)
-    const padX = Math.round(zoom * 1.5)
-    const padY = Math.round(zoom * 0.5)
-    const bgX = screenX - metrics.actualBoundingBoxRight - padX
-    const bgY = screenY - fontSize - padY
-    const bgW = metrics.width + padX * 2
+    const metrics = ctx.measureText(name)
+    const dotSize = Math.round(zoom * 1.2)
+    const dotGap = Math.round(zoom * 1)
+    const padX = Math.round(zoom * 2)
+    const padY = Math.round(zoom * 1.2)
+    const totalTextW = dotSize + dotGap + metrics.width
+    const bgW = totalTextW + padX * 2
     const bgH = fontSize + padY * 2
+    const bgX = Math.round(screenX - bgW / 2)
+    const bgY = Math.round(screenY - bgH / 2)
 
-    ctx.fillStyle = 'rgba(10, 10, 20, 0.7)'
+    // Background: dark semi-transparent with 1px border
+    ctx.fillStyle = 'rgba(10, 10, 20, 0.75)'
     ctx.fillRect(bgX, bgY, bgW, bgH)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'
+    ctx.lineWidth = 1
+    ctx.strokeRect(bgX + 0.5, bgY + 0.5, bgW - 1, bgH - 1)
 
-    // Text
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'
-    ctx.fillText(ch.displayName, screenX, screenY)
+    // Colored dot (matches character palette)
+    const dotColor = PALETTE_COLORS[ch.palette % PALETTE_COLORS.length]
+    const dotX = bgX + padX + dotSize / 2
+    const dotY = screenY
+    ctx.fillStyle = dotColor
+    ctx.beginPath()
+    ctx.arc(dotX, dotY, dotSize / 2, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Name text
+    const textX = dotX + dotSize / 2 + dotGap + metrics.width / 2
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+    ctx.fillText(name, textX, screenY + 0.5)
+
     ctx.restore()
   }
 }
