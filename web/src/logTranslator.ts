@@ -191,11 +191,26 @@ export function translateNewMessages(
     if (lastEntry.role === 'assistant' && !lastEntry.tool_calls?.length) {
       if (!state.isWaiting) {
         state.isWaiting = true
+
+        // Check if the assistant is actively asking the user a question
+        // (needs user input/approve) vs just finished talking
+        const lastText = lastEntry.content?.[0]?.text || ''
+        const isAskingUser = detectUserInputRequest(lastText)
+
         messages.push({
           type: 'agentStatus',
           id: agentId,
           status: 'waiting',
         })
+
+        // If asking for input/approval, also emit permission state
+        // This shows a persistent bubble that doesn't auto-fade
+        if (isAskingUser) {
+          messages.push({
+            type: 'agentToolPermission',
+            id: agentId,
+          })
+        }
       }
     }
   }
@@ -311,4 +326,25 @@ export function generateInitialState(
   const state = createTranslationState()
   const messages = translateNewMessages(agentId, chatHistory, state)
   return { messages, state }
+}
+
+// ── User Input Detection ─────────────────────────────────
+
+/** Detect if assistant text is actively requesting user input or approval */
+function detectUserInputRequest(text: string): boolean {
+  if (!text) return false
+  // Common patterns for asking user input/approval
+  const patterns = [
+    /\?\s*$/m,                          // ends with a question mark
+    /请\s*(确认|回复|告诉|选择|决定|输入)/,   // Chinese: 请确认/回复/告诉/选择
+    /能否|是否|要不要|好吗|可以吗|同意吗/,        // Chinese question words
+    /等待.*(输入|回复|确认|指示)/,          // Waiting for input
+    /please\s+(confirm|reply|choose|select|decide|provide|tell|answer)/i,
+    /would you like/i,
+    /do you want/i,
+    /approve|reject/i,
+    /waiting for your/i,
+    /your (answer|response|input|decision|choice)/i,
+  ]
+  return patterns.some(p => p.test(text))
 }
