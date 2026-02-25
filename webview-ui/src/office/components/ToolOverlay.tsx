@@ -90,11 +90,10 @@ export function ToolOverlay({
         const isHovered = hoveredId === id
         const isSub = ch.isSubagent
 
-        // In web mode: show overlay for active agents (with tools) or hovered/selected
+        // In web mode: show overlay for any active agent (working turn in progress)
         // In VS Code mode: only show for hovered or selected (original behavior)
         const hasActiveTools = agentTools[id]?.some((t) => !t.done)
-        const isActiveWorking = ch.isActive && hasActiveTools
-        const shouldShow = isSelected || isHovered || (isWebMode && isActiveWorking)
+        const shouldShow = isSelected || isHovered || (isWebMode && (ch.isActive || hasActiveTools))
         if (!shouldShow) return null
 
         // Position above character
