@@ -77,6 +77,18 @@ export function useExtensionMessages(
   useEffect(() => {
     // Buffer agents from existingAgents until layout is loaded
     let pendingAgents: Array<{ id: number; palette?: number; hueShift?: number; seatId?: string }> = []
+    // Cache agent names for applying displayName after character creation
+    const nameCache: Record<number, string> = {}
+
+    /** Apply cached displayName to all existing characters */
+    function applyDisplayNames(os: OfficeState): void {
+      for (const [id, name] of Object.entries(nameCache)) {
+        const ch = os.characters.get(Number(id))
+        if (ch && !ch.displayName) {
+          ch.displayName = name
+        }
+      }
+    }
 
     const handler = (e: MessageEvent) => {
       const msg = e.data
@@ -104,6 +116,8 @@ export function useExtensionMessages(
         pendingAgents = []
         layoutReadyRef.current = true
         setLayoutReady(true)
+        // Apply cached display names to newly created characters
+        applyDisplayNames(os)
         if (os.characters.size > 0) {
           saveAgentSeats(os)
         }
@@ -112,6 +126,11 @@ export function useExtensionMessages(
         setAgents((prev) => (prev.includes(id) ? prev : [...prev, id]))
         setSelectedAgent(id)
         os.addAgent(id)
+        // Apply cached display name
+        if (nameCache[id]) {
+          const ch = os.characters.get(id)
+          if (ch) ch.displayName = nameCache[id]
+        }
         saveAgentSeats(os)
       } else if (msg.type === 'agentClosed') {
         const id = msg.id as number
@@ -347,11 +366,12 @@ export function useExtensionMessages(
         // Custom message from web server with agent name/emoji info
         const agentInfoList = msg.agents as Array<{ id: number; name: string; emoji: string }>
         if (Array.isArray(agentInfoList)) {
-          // Set displayName on Character objects for canvas name labels
+          // Cache names and apply to any existing characters
           for (const info of agentInfoList) {
+            nameCache[info.id] = `${info.emoji} ${info.name}`
             const ch = os.characters.get(info.id)
             if (ch) {
-              ch.displayName = `${info.emoji} ${info.name}`
+              ch.displayName = nameCache[info.id]
             }
           }
           setAgentNames((prev) => {
