@@ -222,8 +222,18 @@ function handleWebviewMessage(msg: Record<string, unknown>, ws: WebSocket): void
       break
     case 'openClaude':
       // In web mode, this could open a new kosmos-app chat
-      console.log('[Server] Open agent requested (not supported in web mode)')
+      // TODO: integrate with kosmos-app deep link / CLI once available
+      console.log('[Server] Open agent requested (not yet supported in web mode)')
       break
+    case 'openSessionsFolder': {
+      // Open kosmos-app chat sessions directory in Finder
+      const sessionsDir = path.join(KOSMOS_APP_DIR, 'profiles', profile, 'chat_sessions')
+      console.log(`[Server] Opening sessions folder: ${sessionsDir}`)
+      import('child_process').then(cp => {
+        cp.exec(`open "${sessionsDir}"`)
+      })
+      break
+    }
     case 'saveLayout':
       // Persist layout to file
       try {

@@ -22,6 +22,74 @@ export function isReadingTool(tool: string | null): boolean {
   return READING_TOOLS.has(tool)
 }
 
+// ── Smart wander targets based on tool type ──────────────────
+// These tile zones correspond to areas in the default-layout.json
+
+/** Bookshelf area — characters go here when using Read/Grep/Glob tools */
+const BOOKSHELF_TILES = [
+  { col: 1, row: 12 }, { col: 2, row: 12 }, { col: 3, row: 12 },
+  { col: 5, row: 12 }, { col: 7, row: 12 }, { col: 8, row: 12 },
+  { col: 9, row: 12 },
+]
+
+/** Kitchen/break area — characters visit during idle breaks */
+const KITCHEN_TILES = [
+  { col: 12, row: 12 }, { col: 13, row: 12 }, { col: 14, row: 12 },
+  { col: 15, row: 12 }, { col: 16, row: 12 }, { col: 17, row: 12 },
+  { col: 18, row: 12 },
+]
+
+/** Lounge area — characters go here when waiting for user input */
+const LOUNGE_TILES = [
+  { col: 14, row: 18 }, { col: 15, row: 18 }, { col: 16, row: 18 },
+  { col: 17, row: 18 }, { col: 18, row: 18 },
+  { col: 15, row: 19 }, { col: 16, row: 19 }, { col: 17, row: 19 },
+]
+
+/** Meeting room — characters go here for Task/subtask tools */
+const MEETING_TILES = [
+  { col: 5, row: 4 }, { col: 5, row: 5 }, { col: 6, row: 5 },
+  { col: 6, row: 6 }, { col: 5, row: 6 },
+]
+
+/** Pick a random tile from a zone, falling back to any walkable tile */
+function pickZoneTile(
+  zone: Array<{ col: number; row: number }>,
+  walkableTiles: Array<{ col: number; row: number }>,
+): { col: number; row: number } {
+  // Filter zone tiles to only those that are walkable
+  const valid = zone.filter(z => walkableTiles.some(w => w.col === z.col && w.row === z.row))
+  if (valid.length > 0) {
+    return valid[Math.floor(Math.random() * valid.length)]
+  }
+  return walkableTiles[Math.floor(Math.random() * walkableTiles.length)]
+}
+
+/** Get a themed wander target based on what the character is doing */
+export function getThemedWanderTarget(
+  ch: Character,
+  walkableTiles: Array<{ col: number; row: number }>,
+): { col: number; row: number } {
+  // When idle and about to wander, pick themed destinations
+  if (ch.currentTool) {
+    if (READING_TOOLS.has(ch.currentTool)) {
+      return pickZoneTile(BOOKSHELF_TILES, walkableTiles)
+    }
+    if (ch.currentTool === 'Task') {
+      return pickZoneTile(MEETING_TILES, walkableTiles)
+    }
+  }
+  // Idle wandering: alternate between kitchen, lounge, and random
+  const roll = Math.random()
+  if (roll < 0.3) {
+    return pickZoneTile(KITCHEN_TILES, walkableTiles)
+  } else if (roll < 0.5) {
+    return pickZoneTile(LOUNGE_TILES, walkableTiles)
+  }
+  // Default: random walkable tile
+  return walkableTiles[Math.floor(Math.random() * walkableTiles.length)]
+}
+
 /** Pixel center of a tile */
 function tileCenter(col: number, row: number): { x: number; y: number } {
   return {
@@ -165,7 +233,7 @@ export function updateCharacter(
           }
         }
         if (walkableTiles.length > 0) {
-          const target = walkableTiles[Math.floor(Math.random() * walkableTiles.length)]
+          const target = getThemedWanderTarget(ch, walkableTiles)
           const path = findPath(ch.tileCol, ch.tileRow, target.col, target.row, tileMap, blockedTiles)
           if (path.length > 0) {
             ch.path = path

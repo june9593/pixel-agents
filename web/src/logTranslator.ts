@@ -146,6 +146,7 @@ export interface PixelMessage {
 export interface TranslationState {
   processedCount: number // number of chat_history entries already processed
   activeToolIds: Set<string> // currently active tool IDs
+  activeTaskToolIds: Set<string> // tool IDs that are Task type (create sub-agent characters)
   isWaiting: boolean
   lastRole: string | null
 }
@@ -154,6 +155,7 @@ export function createTranslationState(): TranslationState {
   return {
     processedCount: 0,
     activeToolIds: new Set(),
+    activeTaskToolIds: new Set(),
     isWaiting: true,
     lastRole: null,
   }
@@ -237,8 +239,14 @@ function translateEntry(
 
         for (const tc of entry.tool_calls) {
           const toolName = tc.function.name
+          const mapped = mapToolName(toolName)
           const status = formatToolStatus(toolName, tc.function.arguments)
           state.activeToolIds.add(tc.id)
+
+          // Track Task tools so we can emit subagentClear on completion
+          if (mapped === 'Task') {
+            state.activeTaskToolIds.add(tc.id)
+          }
 
           messages.push({
             type: 'agentToolStart',
@@ -266,18 +274,24 @@ function translateEntry(
       state.lastRole = 'tool'
       const toolCallId = entry.tool_call_id
       if (toolCallId && state.activeToolIds.has(toolCallId)) {
+        // If this was a Task tool, emit subagentClear to remove the sub-agent character
+        // Use a slight delay flag so the webview can show the character briefly
+        if (state.activeTaskToolIds.has(toolCallId)) {
+          state.activeTaskToolIds.delete(toolCallId)
+          messages.push({
+            type: 'subagentClear',
+            id: agentId,
+            parentToolId: toolCallId,
+            _delay: true, // signal server to delay this message
+          })
+        }
+
         state.activeToolIds.delete(toolCallId)
         messages.push({
           type: 'agentToolDone',
           id: agentId,
           toolId: toolCallId,
         })
-      }
-
-      // If all tools are done, check if this is the last tool result
-      // before the next assistant message
-      if (state.activeToolIds.size === 0) {
-        // Tools completed — status will be determined by next message
       }
       break
     }

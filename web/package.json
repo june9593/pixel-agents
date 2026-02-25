@@ -1,13 +1,28 @@
 {
-  "name": "pixel-agents-web",
+  "name": "pixel-kosmos",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
-  "description": "Standalone web version of Pixel Agents - monitors kosmos-app agents",
+  "description": "Pixel art office visualization for kosmos-app AI agents",
+  "keywords": ["pixel-art", "kosmos", "ai-agents", "visualization"],
+  "license": "MIT",
+  "bin": {
+    "pixel-kosmos": "./bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "dist/",
+    "package.json",
+    "README.md"
+  ],
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
-    "build:webview": "cd ../webview-ui && npm run build"
+    "build": "npm run build:webview && npm run build:server && npm run copy-assets",
+    "build:webview": "cd ../webview-ui && npx vite build",
+    "build:server": "npx tsc -p tsconfig.build.json",
+    "copy-assets": "cp -r ../dist/webview dist/webview",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "chokidar": "^4.0.0",

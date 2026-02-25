@@ -232,7 +232,14 @@ export class KosmosWatcher extends EventEmitter {
       }
 
       for (const msg of newMessages) {
-        this.emit('message', msg)
+        if (msg._delay) {
+          // Delay subagentClear so the character is visible briefly
+          const delayedMsg = { ...msg }
+          delete delayedMsg._delay
+          setTimeout(() => this.emit('message', delayedMsg), 2000)
+        } else {
+          this.emit('message', msg)
+        }
       }
     } catch (err) {
       // File might be in the middle of being written
