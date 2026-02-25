@@ -184,49 +184,33 @@ export function translateNewMessages(
     state.processedCount = i + 1
   }
 
-  // Detect turn end: if all tools are done and conversation is idle
-  if (state.activeToolIds.size === 0 && !state.isWaiting) {
-    const lastEntry = chatHistory[chatHistory.length - 1]
-    if (!lastEntry) return messages
+  // Detect turn end: if the last processed message is the final one
+  // and it's an assistant text response without tool_calls, mark as waiting
+  const lastEntry = chatHistory[chatHistory.length - 1]
+  if (lastEntry && state.activeToolIds.size === 0) {
+    if (lastEntry.role === 'assistant' && !lastEntry.tool_calls?.length) {
+      if (!state.isWaiting) {
+        state.isWaiting = true
 
-    // Find the last assistant text message (may or may not have tool_calls)
-    let lastAssistantText = ''
-    for (let j = chatHistory.length - 1; j >= startIdx; j--) {
-      const e = chatHistory[j]
-      if (e.role === 'assistant') {
-        const text = e.content?.[0]?.text || ''
-        if (text.trim()) {
-          lastAssistantText = text
-          break
-        }
-      }
-    }
+        // Check if the assistant is actively asking the user a question
+        // (needs user input/approve) vs just finished talking
+        const lastText = lastEntry.content?.[0]?.text || ''
+        const isAskingUser = detectUserInputRequest(lastText)
 
-    // Case 1: last entry is assistant text without tool_calls → turn ended
-    // Case 2: last entry is tool result and no active tools → all tools done
-    const isTurnEnd =
-      (lastEntry.role === 'assistant' && !lastEntry.tool_calls?.length) ||
-      (lastEntry.role === 'tool' && state.activeToolIds.size === 0)
-
-    if (isTurnEnd) {
-      state.isWaiting = true
-
-      // Check if the assistant was asking the user a question
-      const isAskingUser = lastAssistantText ? detectUserInputRequest(lastAssistantText) : false
-
-      messages.push({
-        type: 'agentStatus',
-        id: agentId,
-        status: 'waiting',
-      })
-
-      // Only show permission bubble if clearly asking for input
-      // (not just a rhetorical question in a report)
-      if (isAskingUser && !lastAssistantText.includes('测试') && !lastAssistantText.includes('总结')) {
         messages.push({
-          type: 'agentToolPermission',
+          type: 'agentStatus',
           id: agentId,
+          status: 'waiting',
         })
+
+        // If asking for input/approval, also emit permission state
+        // This shows a persistent bubble that doesn't auto-fade
+        if (isAskingUser) {
+          messages.push({
+            type: 'agentToolPermission',
+            id: agentId,
+          })
+        }
       }
     }
   }

@@ -572,23 +572,15 @@ export class OfficeState {
   setAgentTool(id: number, tool: string | null): void {
     const ch = this.characters.get(id)
     if (ch) {
-      const prevTool = ch.currentTool
       ch.currentTool = tool
-
-      // When starting a reading tool, walk to the bookshelf area.
-      // But only if the character is currently at their desk (TYPE state)
-      // and there's no rapid tool switching happening.
-      if (tool && READING_TOOL_SET.has(tool) && ch.isActive
-          && ch.state === CharacterState.TYPE && ch.seatId) {
-        // Record when this reading tool started so we can decide
-        // whether to animate the walk or skip it
-        ch._readingToolStart = Date.now()
-
+      // When starting a reading tool, walk to the bookshelf area
+      if (tool && READING_TOOL_SET.has(tool) && ch.isActive) {
         const bookshelfTiles = [
           { col: 1, row: 12 }, { col: 2, row: 12 }, { col: 3, row: 12 },
           { col: 5, row: 12 }, { col: 7, row: 12 }, { col: 8, row: 12 },
           { col: 9, row: 12 },
         ]
+        // Pick a valid bookshelf tile
         const valid = bookshelfTiles.filter(t =>
           this.walkableTiles.some(w => w.col === t.col && w.row === t.row)
         )
@@ -601,31 +593,6 @@ export class OfficeState {
             ch.state = CharacterState.WALK
             ch.frame = 0
             ch.frameTimer = 0
-          }
-        }
-      }
-
-      // When tool is cleared (done) and character was walking to bookshelf,
-      // if tool completed too fast (< 3s), teleport back to seat immediately
-      if (!tool && prevTool && READING_TOOL_SET.has(prevTool) && ch._readingToolStart) {
-        const elapsed = Date.now() - ch._readingToolStart
-        ch._readingToolStart = undefined
-        if (elapsed < 3000 && ch.state === CharacterState.WALK) {
-          // Tool was too fast — snap back to seat
-          if (ch.seatId) {
-            const seat = this.seats.get(ch.seatId)
-            if (seat) {
-              ch.tileCol = seat.seatCol
-              ch.tileRow = seat.seatRow
-              ch.x = seat.seatCol * TILE_SIZE + TILE_SIZE / 2
-              ch.y = seat.seatRow * TILE_SIZE + TILE_SIZE / 2
-              ch.path = []
-              ch.moveProgress = 0
-              ch.state = CharacterState.TYPE
-              ch.dir = seat.facingDir
-              ch.frame = 0
-              ch.frameTimer = 0
-            }
           }
         }
       }
