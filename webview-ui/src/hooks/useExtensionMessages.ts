@@ -347,6 +347,13 @@ export function useExtensionMessages(
         // Custom message from web server with agent name/emoji info
         const agentInfoList = msg.agents as Array<{ id: number; name: string; emoji: string }>
         if (Array.isArray(agentInfoList)) {
+          // Set displayName on Character objects for canvas name labels
+          for (const info of agentInfoList) {
+            const ch = os.characters.get(info.id)
+            if (ch) {
+              ch.displayName = `${info.emoji} ${info.name}`
+            }
+          }
           setAgentNames((prev) => {
             const next = { ...prev }
             for (const info of agentInfoList) {

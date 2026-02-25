@@ -445,6 +445,51 @@ export function renderRotateButton(
   return { cx, cy, radius }
 }
 
+// ── Name labels ─────────────────────────────────────────────────
+
+export function renderNameLabels(
+  ctx: CanvasRenderingContext2D,
+  characters: Character[],
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+): void {
+  for (const ch of characters) {
+    if (!ch.displayName) continue
+    // Skip characters with active matrix effects
+    if (ch.matrixEffect) continue
+
+    const sittingOffset = ch.state === CharacterState.TYPE ? CHARACTER_SITTING_OFFSET_PX : 0
+    // Position above character's head
+    const screenX = Math.round(offsetX + ch.x * zoom)
+    const screenY = Math.round(offsetY + (ch.y + sittingOffset) * zoom - 16 * zoom - 4 * zoom)
+
+    // Use a small pixel-art sized font
+    const fontSize = Math.max(8, Math.round(zoom * 4))
+    ctx.save()
+    ctx.font = `${fontSize}px 'FS Pixel Sans', monospace`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'bottom'
+
+    // Background pill
+    const metrics = ctx.measureText(ch.displayName)
+    const padX = Math.round(zoom * 1.5)
+    const padY = Math.round(zoom * 0.5)
+    const bgX = screenX - metrics.actualBoundingBoxRight - padX
+    const bgY = screenY - fontSize - padY
+    const bgW = metrics.width + padX * 2
+    const bgH = fontSize + padY * 2
+
+    ctx.fillStyle = 'rgba(10, 10, 20, 0.7)'
+    ctx.fillRect(bgX, bgY, bgW, bgH)
+
+    // Text
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'
+    ctx.fillText(ch.displayName, screenX, screenY)
+    ctx.restore()
+  }
+}
+
 // ── Speech bubbles ──────────────────────────────────────────────
 
 export function renderBubbles(
@@ -578,6 +623,9 @@ export function renderFrame(
 
   // Speech bubbles (always on top of characters)
   renderBubbles(ctx, characters, offsetX, offsetY, zoom)
+
+  // Name labels (always visible, below bubbles)
+  renderNameLabels(ctx, characters, offsetX, offsetY, zoom)
 
   // Editor overlays
   if (editor) {

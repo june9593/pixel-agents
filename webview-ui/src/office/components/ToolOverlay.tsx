@@ -4,6 +4,7 @@ import type { OfficeState } from '../engine/officeState.js'
 import type { SubagentCharacter } from '../../hooks/useExtensionMessages.js'
 import { TILE_SIZE, CharacterState } from '../types.js'
 import { TOOL_OVERLAY_VERTICAL_OFFSET, CHARACTER_SITTING_OFFSET_PX } from '../../constants.js'
+import { isWebMode } from '../../vscodeApi.js'
 
 interface ToolOverlayProps {
   officeState: OfficeState
@@ -178,7 +179,7 @@ export function ToolOverlay({
               >
                 {activityText}
               </span>
-              {isSelected && !isSub && (
+              {isSelected && !isSub && !isWebMode && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation()

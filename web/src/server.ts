@@ -226,13 +226,10 @@ function handleWebviewMessage(msg: Record<string, unknown>, ws: WebSocket): void
       console.log('[Server] Open agent requested (not yet supported in web mode)')
       break
     case 'closeAgent': {
-      // Remove agent from watcher and broadcast closure
+      // In web mode we don't have permission to delete kosmos agents.
+      // Just log the request — agent lifecycle is managed by kosmos-app.
       const closedId = msg.id as number
-      const removed = watcher.removeAgentById(closedId)
-      if (removed) {
-        console.log(`[Server] Agent ${closedId} removed`)
-        broadcast({ type: 'agentClosed', id: closedId })
-      }
+      console.log(`[Server] Close agent ${closedId} requested (read-only mode, ignoring)`)
       break
     }
     case 'openSessionsFolder': {

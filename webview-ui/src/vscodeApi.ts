@@ -56,6 +56,7 @@ function createWebSocketBridge(): VsCodeApi {
 }
 
 let vscodeInstance: VsCodeApi
+let webMode = false
 try {
   // VS Code extension environment
   vscodeInstance = acquireVsCodeApi()
@@ -63,6 +64,8 @@ try {
   // Standalone web mode — use WebSocket bridge
   console.log('[PixelAgents] Running in standalone web mode')
   vscodeInstance = createWebSocketBridge()
+  webMode = true
 }
 
 export const vscode = vscodeInstance
+export const isWebMode = webMode

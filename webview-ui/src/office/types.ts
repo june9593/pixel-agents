@@ -193,4 +193,8 @@ export interface Character {
   matrixEffectTimer: number
   /** Per-column random seeds (16 values) for staggered rain timing */
   matrixEffectSeeds: number[]
+  /** Display name for the agent (set from kosmos-app) */
+  displayName?: string
+  /** Walk speed multiplier (1 = normal, >1 = faster for short trips) */
+  walkSpeedMultiplier?: number
 }
