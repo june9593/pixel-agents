@@ -351,8 +351,8 @@ function syncAgentProfiles(): void {
 watcher.on('message', (msg) => {
   broadcast(msg)
 
-  // Track tool calls for game economy
-  if (msg.type === 'agentToolDone') {
+  // Track tool calls for game economy (only real-time events, not initial replay)
+  if (msg.type === 'agentToolDone' && !msg._replay) {
     const agentId = msg.id as number
     const watched = watcher.getAgents().find(a => a.agentId === agentId)
     if (watched) {
@@ -378,7 +378,7 @@ watcher.on('message', (msg) => {
   }
 
   // Reset combo on turn end
-  if (msg.type === 'agentStatus' && msg.status === 'waiting') {
+  if (msg.type === 'agentStatus' && msg.status === 'waiting' && !msg._replay) {
     recordTurnEnd(gameState, msg.id as number)
   }
 })

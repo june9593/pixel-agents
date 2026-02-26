@@ -36,7 +36,6 @@ const ACTIONS = [
   { type: 'salary',  cost: 20, i18nKey: 'salary',  emoji: '💰' },
   { type: 'promote', cost: 50, i18nKey: 'promote', emoji: '⬆️' },
   { type: 'party',   cost: 30, i18nKey: 'party',   emoji: '🎉' },
-  { type: 'party',   cost: 30, i18nKey: 'party',   emoji: '🎉' },
 ]
 
 const hudStyle: React.CSSProperties = {
@@ -184,7 +183,7 @@ export function GameHud({ coins, getSelectedAgentId, isAgentIdle, agentProfiles 
                 fontSize: '20px',
               }}
             >
-              🎁 {t('interact')}
+              {t('interact')}
             </button>
             <button
               onClick={() => { setShowProfile(!showProfile); setShowMenu(false) }}
@@ -196,7 +195,7 @@ export function GameHud({ coins, getSelectedAgentId, isAgentIdle, agentProfiles 
                 fontSize: '20px',
               }}
             >
-              📊 {t('profile')}
+              {t('profile')}
             </button>
           </>
         )}
@@ -208,7 +207,7 @@ export function GameHud({ coins, getSelectedAgentId, isAgentIdle, agentProfiles 
         return (
         <div style={{ ...menuStyle, top: 48, right: 8 }}>
           <div style={{ padding: '4px 8px', fontSize: '18px', opacity: 0.6, borderBottom: '1px solid var(--pixel-border)', marginBottom: 4 }}>
-            {profile.emoji} {profile.name} - {profile.rank}
+            {profile.emoji} {profile.name} - {t('rank_' + profile.rankIndex)}
             {!agentIdle && <span style={{ color: '#e09050', marginLeft: 6 }}>{t('working')}</span>}
           </div>
           {ACTIONS.map(a => {
@@ -250,7 +249,7 @@ export function GameHud({ coins, getSelectedAgentId, isAgentIdle, agentProfiles 
         <div style={{ ...menuStyle, top: 48, right: 8, minWidth: 220 }}>
           <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--pixel-border)', marginBottom: 6 }}>
             <div style={{ fontSize: '22px', fontWeight: 'bold' }}>{profile.emoji} {profile.name}</div>
-            <div style={{ fontSize: '18px', opacity: 0.7 }}>{profile.rank}</div>
+            <div style={{ fontSize: '18px', opacity: 0.7 }}>{t('rank_' + profile.rankIndex)}</div>
           </div>
 
           {/* Mood bar */}

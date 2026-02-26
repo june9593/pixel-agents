@@ -184,9 +184,9 @@ export class KosmosWatcher extends EventEmitter {
           agents: [{ id: agentId, name: agent.name, emoji: agent.emoji }],
         })
 
-        // If there's an existing session, process it for initial state
+        // If there's an existing session, process it for initial state (mark as replay)
         if (session) {
-          this.processSessionFile(watched)
+          this.processSessionFile(watched, true)
         }
       }
     }
@@ -243,7 +243,7 @@ export class KosmosWatcher extends EventEmitter {
   /**
    * Read and process a session file, emitting new messages
    */
-  private processSessionFile(watched: WatchedAgent): void {
+  private processSessionFile(watched: WatchedAgent, isReplay = false): void {
     if (!watched.session) return
 
     try {
@@ -274,6 +274,8 @@ export class KosmosWatcher extends EventEmitter {
       }
 
       for (const msg of newMessages) {
+        // Mark replay messages so game state doesn't double-count
+        if (isReplay) msg._replay = true
         if (msg._delay) {
           // Delay subagentClear so the character is visible briefly
           const delayedMsg = { ...msg }

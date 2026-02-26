@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { SettingsModal } from './SettingsModal.js'
+import { t } from '../i18n.js'
 
 interface BottomToolbarProps {
   isEditMode: boolean
@@ -72,7 +73,7 @@ export function BottomToolbar({
           color: 'var(--pixel-agent-text)',
         }}
       >
-        + Agent
+        {t('add_agent')}
       </button>
       <button
         onClick={onToggleEditMode}
@@ -88,7 +89,7 @@ export function BottomToolbar({
         }
         title="Edit office layout"
       >
-        Layout
+        {t('layout')}
       </button>
       <div style={{ position: 'relative' }}>
         <button
@@ -105,7 +106,7 @@ export function BottomToolbar({
           }
           title="Settings"
         >
-          Settings
+          {t('settings')}
         </button>
         <SettingsModal
           isOpen={isSettingsOpen}

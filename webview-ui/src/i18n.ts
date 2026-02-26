@@ -41,6 +41,23 @@ const strings: Record<Locale, Record<string, string>> = {
 
     // Status
     'idle': 'Idle',
+
+    // Ranks
+    'rank_0': '🌱 Intern',
+    'rank_1': '💼 Junior',
+    'rank_2': '⭐ Senior',
+    'rank_3': '🔥 Expert',
+    'rank_4': '👑 Legend',
+
+    // Editor
+    'press_r_rotate': 'Press R to rotate',
+    'undo': 'Undo',
+    'redo': 'Redo',
+    'save': 'Save',
+    'reset': 'Reset',
+    'reset_confirm': 'Reset?',
+    'yes': 'Yes',
+    'no': 'No',
   },
   zh: {
     // Settings
@@ -77,6 +94,23 @@ const strings: Record<Locale, Record<string, string>> = {
 
     // Status
     'idle': '空闲',
+
+    // Ranks
+    'rank_0': '🌱 实习生',
+    'rank_1': '💼 初级',
+    'rank_2': '⭐ 高级',
+    'rank_3': '🔥 专家',
+    'rank_4': '👑 传说',
+
+    // Editor
+    'press_r_rotate': '按 R 旋转',
+    'undo': '撤销',
+    'redo': '重做',
+    'save': '保存',
+    'reset': '重置',
+    'reset_confirm': '确认重置？',
+    'yes': '是',
+    'no': '否',
   },
 }
 

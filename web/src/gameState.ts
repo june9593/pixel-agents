@@ -185,6 +185,10 @@ export function recordToolCall(state: GameState, agentId: number): {
   profile.todayToolCalls++
   profile.lastToolTime = Date.now()
 
+  // Mood: slight tiredness from continuous work (-1 per tool call)
+  // But combo gives mood boost (+2 on combo)
+  profile.mood = Math.max(10, profile.mood - 1)
+
   // Combo tracking
   profile.comboCount++
   if (profile.comboCount > profile.bestCombo) {
@@ -197,6 +201,7 @@ export function recordToolCall(state: GameState, agentId: number): {
   if (profile.comboCount >= COMBO_THRESHOLD && profile.comboCount % COMBO_THRESHOLD === 0) {
     coinsEarned += COMBO_BONUS
     comboBonus = true
+    profile.mood = Math.min(100, profile.mood + 3) // combo boosts mood
   }
   state.coins += coinsEarned
   state.totalCoinsEarned += coinsEarned
@@ -227,6 +232,10 @@ export function recordTurnEnd(state: GameState, agentId: number): void {
   const profile = state.agents[agentId]
   if (profile) {
     profile.comboCount = 0
+    // If agent has done many tasks today without any interaction, mood drops more
+    if (profile.todayToolCalls > 20 && profile.mood > 30) {
+      profile.mood = Math.max(20, profile.mood - 3) // overwork fatigue
+    }
     saveGameState(state)
   }
 }
