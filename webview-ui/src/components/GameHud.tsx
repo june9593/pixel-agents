@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { vscode, isWebMode } from '../vscodeApi.js'
+import { t } from '../i18n.js'
 
 interface GameHudProps {
   coins: number
@@ -30,11 +31,12 @@ interface GameNotification {
 }
 
 const ACTIONS = [
-  { type: 'tea',     cost: 10, label: '☕ 请喝奶茶', emoji: '☕' },
-  { type: 'pizza',   cost: 15, label: '🍕 请吃披萨', emoji: '🍕' },
-  { type: 'salary',  cost: 20, label: '💰 发工资',   emoji: '💰' },
-  { type: 'promote', cost: 50, label: '⬆️ 升职加薪', emoji: '⬆️' },
-  { type: 'party',   cost: 30, label: '🎉 团建',     emoji: '🎉' },
+  { type: 'tea',     cost: 10, i18nKey: 'tea',     emoji: '☕' },
+  { type: 'pizza',   cost: 15, i18nKey: 'pizza',   emoji: '🍕' },
+  { type: 'salary',  cost: 20, i18nKey: 'salary',  emoji: '💰' },
+  { type: 'promote', cost: 50, i18nKey: 'promote', emoji: '⬆️' },
+  { type: 'party',   cost: 30, i18nKey: 'party',   emoji: '🎉' },
+  { type: 'party',   cost: 30, i18nKey: 'party',   emoji: '🎉' },
 ]
 
 const hudStyle: React.CSSProperties = {
@@ -64,6 +66,7 @@ const menuStyle: React.CSSProperties = {
   padding: '6px',
   boxShadow: 'var(--pixel-shadow)',
   minWidth: 180,
+  color: 'var(--pixel-text)',
 }
 
 const btnStyle: React.CSSProperties = {
@@ -181,7 +184,7 @@ export function GameHud({ coins, getSelectedAgentId, isAgentIdle, agentProfiles 
                 fontSize: '20px',
               }}
             >
-              🎁 互动
+              🎁 {t('interact')}
             </button>
             <button
               onClick={() => { setShowProfile(!showProfile); setShowMenu(false) }}
@@ -193,7 +196,7 @@ export function GameHud({ coins, getSelectedAgentId, isAgentIdle, agentProfiles 
                 fontSize: '20px',
               }}
             >
-              📊 档案
+              📊 {t('profile')}
             </button>
           </>
         )}
@@ -206,7 +209,7 @@ export function GameHud({ coins, getSelectedAgentId, isAgentIdle, agentProfiles 
         <div style={{ ...menuStyle, top: 48, right: 8 }}>
           <div style={{ padding: '4px 8px', fontSize: '18px', opacity: 0.6, borderBottom: '1px solid var(--pixel-border)', marginBottom: 4 }}>
             {profile.emoji} {profile.name} - {profile.rank}
-            {!agentIdle && <span style={{ color: '#e09050', marginLeft: 6 }}>(working...)</span>}
+            {!agentIdle && <span style={{ color: '#e09050', marginLeft: 6 }}>{t('working')}</span>}
           </div>
           {ACTIONS.map(a => {
             const canAfford = coins >= a.cost
@@ -228,7 +231,7 @@ export function GameHud({ coins, getSelectedAgentId, isAgentIdle, agentProfiles 
                   background: hoveredAction === a.type && !disabled ? 'rgba(255,255,255,0.08)' : 'transparent',
                 }}
               >
-                <span>{a.label}{needsIdle ? ' 🔒' : ''}</span>
+                <span>{t(a.i18nKey)}{needsIdle ? ' 🔒' : ''}</span>
                 <span style={{ color: canAfford ? '#FFD700' : '#e06060', fontSize: '18px' }}>{a.cost}🪙</span>
               </button>
             )
@@ -252,7 +255,7 @@ export function GameHud({ coins, getSelectedAgentId, isAgentIdle, agentProfiles 
 
           {/* Mood bar */}
           <div style={{ padding: '4px 8px' }}>
-            <div style={{ fontSize: '16px', opacity: 0.6, marginBottom: 2 }}>❤️ 心情 {profile.mood}/100</div>
+            <div style={{ fontSize: '16px', opacity: 0.6, marginBottom: 2 }}>❤️ {t('mood')} {profile.mood}/100</div>
             <div style={{ width: '100%', height: 8, background: 'rgba(255,255,255,0.1)', borderRadius: 0 }}>
               <div style={{ width: `${profile.mood}%`, height: '100%', background: moodColor(profile.mood), transition: 'width 0.3s' }} />
             </div>
@@ -260,15 +263,15 @@ export function GameHud({ coins, getSelectedAgentId, isAgentIdle, agentProfiles 
 
           {/* Stats */}
           <div style={{ padding: '4px 8px', fontSize: '18px' }}>
-            <div>📋 今日: {profile.todayToolCalls} 任务</div>
-            <div>📈 总计: {profile.totalToolCalls} 任务</div>
-            <div>🔥 最佳连击: {profile.bestCombo}</div>
+            <div>📋 {t('today')}: {profile.todayToolCalls} {t('tasks')}</div>
+            <div>📈 {t('total')}: {profile.totalToolCalls} {t('tasks')}</div>
+            <div>🔥 {t('best_combo')}: {profile.bestCombo}</div>
           </div>
 
           {/* Achievements */}
           {profile.achievements.length > 0 && (
             <div style={{ padding: '4px 8px', fontSize: '16px', borderTop: '1px solid var(--pixel-border)', marginTop: 4 }}>
-              <div style={{ opacity: 0.6, marginBottom: 2 }}>🏆 成就</div>
+              <div style={{ opacity: 0.6, marginBottom: 2 }}>🏆 {t('achievements')}</div>
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                 {profile.achievements.map(achId => (
                   <span key={achId} title={achId} style={{ fontSize: '20px' }}>

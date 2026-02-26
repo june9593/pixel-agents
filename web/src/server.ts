@@ -269,6 +269,31 @@ function handleWebviewMessage(msg: Record<string, unknown>, ws: WebSocket): void
     case 'saveAgentSeats':
       // Persist agent seats
       break
+    case 'getLayoutForExport': {
+      // Send current layout back to webview for browser download
+      const layoutDir = path.join(os.homedir(), '.pixel-agents')
+      const layoutPath = path.join(layoutDir, 'layout.json')
+      let layout = null
+      if (fs.existsSync(layoutPath)) {
+        try { layout = JSON.parse(fs.readFileSync(layoutPath, 'utf-8')) } catch { /* ignore */ }
+      }
+      ws.send(JSON.stringify({ type: 'layoutExportData', layout }))
+      break
+    }
+    case 'importLayoutData': {
+      // Save imported layout and broadcast to all clients
+      const layout = msg.layout as Record<string, unknown>
+      try {
+        const layoutDir = path.join(os.homedir(), '.pixel-agents')
+        if (!fs.existsSync(layoutDir)) fs.mkdirSync(layoutDir, { recursive: true })
+        fs.writeFileSync(path.join(layoutDir, 'layout.json'), JSON.stringify(layout, null, 2))
+        broadcast({ type: 'layoutLoaded', layout })
+        console.log('[Server] Layout imported')
+      } catch (err) {
+        console.error(`[Server] Import layout error: ${err}`)
+      }
+      break
+    }
     case 'gameAction': {
       // Player spends coins on an agent interaction
       const actionAgentId = msg.agentId as number
