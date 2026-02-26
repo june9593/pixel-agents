@@ -183,6 +183,7 @@ function App() {
   const [agentProfiles, setAgentProfiles] = useState<Record<number, AgentProfileData>>({})
 
   const handleToggleDebugMode = useCallback(() => setIsDebugMode((prev) => !prev), [])
+  const getSelectedAgentId = useCallback(() => getOfficeState().selectedAgentId, [])
   const handleToggleNameLabels = useCallback(() => setShowNameLabels((prev) => !prev), [])
 
   // Listen for game state updates from server
@@ -434,7 +435,7 @@ function App() {
 
       <GameHud
         coins={gameCoins}
-        getSelectedAgentId={() => officeState.selectedAgentId}
+        getSelectedAgentId={getSelectedAgentId}
         agentProfiles={agentProfiles}
       />
     </div>
