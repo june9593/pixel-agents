@@ -4,7 +4,7 @@ import { OfficeCanvas } from './office/components/OfficeCanvas.js'
 import { ToolOverlay } from './office/components/ToolOverlay.js'
 import { EditorToolbar } from './office/editor/EditorToolbar.js'
 import { EditorState } from './office/editor/editorState.js'
-import { EditTool } from './office/types.js'
+import { EditTool, CharacterState } from './office/types.js'
 import { isRotatable } from './office/layout/furnitureCatalog.js'
 import { vscode } from './vscodeApi.js'
 import { useExtensionMessages } from './hooks/useExtensionMessages.js'
@@ -15,6 +15,7 @@ import { ZoomControls } from './components/ZoomControls.js'
 import { BottomToolbar } from './components/BottomToolbar.js'
 import { DebugView } from './components/DebugView.js'
 import { AgentLabels } from './components/AgentLabels.js'
+import { GameHud, type AgentProfileData } from './components/GameHud.js'
 
 /** Day/night tint overlay — changes color based on real time of day */
 function DayNightOverlay() {
@@ -178,9 +179,56 @@ function App() {
 
   const [isDebugMode, setIsDebugMode] = useState(false)
   const [showNameLabels, setShowNameLabels] = useState(true)
+  const [gameCoins, setGameCoins] = useState(0)
+  const [agentProfiles, setAgentProfiles] = useState<Record<number, AgentProfileData>>({})
 
   const handleToggleDebugMode = useCallback(() => setIsDebugMode((prev) => !prev), [])
   const handleToggleNameLabels = useCallback(() => setShowNameLabels((prev) => !prev), [])
+
+  // Listen for game state updates from server
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      const msg = e.data
+      if (msg.type === 'gameUpdate') {
+        setGameCoins(msg.coins ?? 0)
+        setAgentProfiles(msg.agents ?? {})
+      } else if (msg.type === 'gameCoinEarned') {
+        setGameCoins(msg.totalCoins ?? 0)
+      } else if (msg.type === 'gameAnimation') {
+        // Trigger character animation for game actions
+        const os = getOfficeState()
+        const agentId = msg.agentId as number
+        if (msg.action === 'tea' || msg.action === 'pizza') {
+          // Send to kitchen
+          const ch = os.characters.get(agentId)
+          if (ch) {
+            os['sendCharacterToZone'](ch, 'kitchen')
+          }
+        } else if (msg.action === 'party') {
+          // Send all idle characters to meeting room
+          for (const ch of os.characters.values()) {
+            if (!ch.isActive && ch.state !== CharacterState.WALK) {
+              os['sendCharacterToZone'](ch, 'meeting')
+            }
+          }
+        }
+        // Trigger sparkle effect for salary/promote
+        if (msg.action === 'salary' || msg.action === 'promote') {
+          const ch = os.characters.get(agentId)
+          if (ch) {
+            ch.sparkleTimer = 3.0
+            ch.sparkleParticles = Array.from({ length: 10 }, () => ({
+              x: (Math.random() - 0.5) * 24,
+              y: -Math.random() * 20 - 8,
+              delay: Math.random() * 0.8,
+            }))
+          }
+        }
+      }
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [])
 
   const handleSelectAgent = useCallback((id: number) => {
     vscode.postMessage({ type: 'focusAgent', id })
@@ -246,6 +294,11 @@ function App() {
           50% { opacity: 0.3; }
         }
         .pixel-agents-pulse { animation: pixel-agents-pulse ${PULSE_ANIMATION_DURATION_SEC}s ease-in-out infinite; }
+        @keyframes pixel-agents-notif {
+          0% { opacity: 1; transform: translateY(0); }
+          70% { opacity: 1; transform: translateY(-10px); }
+          100% { opacity: 0; transform: translateY(-20px); }
+        }
       `}</style>
 
       <OfficeCanvas
@@ -378,6 +431,12 @@ function App() {
           onSelectAgent={handleSelectAgent}
         />
       )}
+
+      <GameHud
+        coins={gameCoins}
+        selectedAgentId={officeState.selectedAgentId}
+        agentProfiles={agentProfiles}
+      />
     </div>
   )
 }

@@ -21,6 +21,11 @@ import os from 'os'
 import { fileURLToPath } from 'url'
 import { KosmosWatcher } from './kosmosWatcher.js'
 import { loadAllAssets, type AllAssets } from './webAssetLoader.js'
+import {
+  loadGameState, saveGameState, ensureAgentProfile, recordToolCall,
+  recordTurnEnd, performAction, getGameSummary, ACTIONS,
+  type GameState, type ActionType,
+} from './gameState.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -90,9 +95,14 @@ app.get('/api/agents', (_req, res) => {
   res.json(info)
 })
 
+// Game state API
+app.get('/api/game', (_req, res) => {
+  res.json(getGameSummary(gameState))
+})
+
 // Health check
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', agents: watcher.getAgents().length })
+  res.json({ status: 'ok', agents: watcher.getAgents().length, coins: gameState.coins })
 })
 
 // Fallback to index.html for SPA
@@ -219,6 +229,9 @@ function handleWebviewMessage(msg: Record<string, unknown>, ws: WebSocket): void
       ws.send(JSON.stringify(watcher.generateExistingAgentsMessage()))
       // Send layout last — this triggers agent creation from the buffer
       sendDefaultLayout(ws)
+
+      // Send game state
+      ws.send(JSON.stringify({ type: 'gameUpdate', ...getGameSummary(gameState) }))
       break
     case 'openClaude':
       // In web mode, this could open a new kosmos-app chat
@@ -256,6 +269,34 @@ function handleWebviewMessage(msg: Record<string, unknown>, ws: WebSocket): void
     case 'saveAgentSeats':
       // Persist agent seats
       break
+    case 'gameAction': {
+      // Player spends coins on an agent interaction
+      const actionAgentId = msg.agentId as number
+      const actionType = msg.action as ActionType
+      if (!ACTIONS[actionType]) {
+        ws.send(JSON.stringify({ type: 'gameActionResult', success: false, reason: 'Unknown action' }))
+        break
+      }
+      const result = performAction(gameState, actionAgentId, actionType)
+      ws.send(JSON.stringify({
+        type: 'gameActionResult',
+        ...result,
+        action: actionType,
+        agentId: actionAgentId,
+        coins: gameState.coins,
+      }))
+      if (result.success) {
+        // Broadcast game update + animation trigger to all clients
+        broadcast({
+          type: 'gameAnimation',
+          agentId: actionAgentId,
+          action: actionType,
+          emoji: ACTIONS[actionType].emoji,
+        })
+        broadcast({ type: 'gameUpdate', ...getGameSummary(gameState) })
+      }
+      break
+    }
     default:
       break
   }
@@ -270,14 +311,57 @@ const watcher = new KosmosWatcher({
   pollInterval: 2000,
 })
 
-// Forward watcher messages to all WebSocket clients
+// ── Game State ─────────────────────────────────────────────────
+
+const gameState: GameState = loadGameState()
+
+function syncAgentProfiles(): void {
+  for (const watched of watcher.getAgents()) {
+    ensureAgentProfile(gameState, watched.agentId, watched.agent.name, watched.agent.emoji)
+  }
+  saveGameState(gameState)
+}
+
+// Forward watcher messages to all WebSocket clients + track game events
 watcher.on('message', (msg) => {
   broadcast(msg)
+
+  // Track tool calls for game economy
+  if (msg.type === 'agentToolDone') {
+    const agentId = msg.id as number
+    const watched = watcher.getAgents().find(a => a.agentId === agentId)
+    if (watched) {
+      ensureAgentProfile(gameState, agentId, watched.agent.name, watched.agent.emoji)
+      const result = recordToolCall(gameState, agentId)
+      if (result.coinsEarned > 0) {
+        broadcast({
+          type: 'gameCoinEarned',
+          agentId,
+          coins: result.coinsEarned,
+          combo: result.comboBonus,
+          totalCoins: gameState.coins,
+        })
+      }
+      for (const ach of result.newAchievements) {
+        broadcast({
+          type: 'gameAchievement',
+          agentId,
+          achievement: { id: ach.id, name: ach.name, emoji: ach.emoji, description: ach.description },
+        })
+      }
+    }
+  }
+
+  // Reset combo on turn end
+  if (msg.type === 'agentStatus' && msg.status === 'waiting') {
+    recordTurnEnd(gameState, msg.id as number)
+  }
 })
 
 // ── Start Server ───────────────────────────────────────────────
 
 watcher.start()
+syncAgentProfiles()
 
 server.listen(PORT, () => {
   console.log('')
