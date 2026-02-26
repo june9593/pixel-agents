@@ -618,7 +618,7 @@ export class OfficeState {
   }
 
   /** Navigate a character to a themed zone in the office */
-  private sendCharacterToZone(ch: Character, zone: 'desk' | 'bookshelf' | 'server' | 'meeting' | 'lounge' | 'kitchen'): void {
+  sendCharacterToZone(ch: Character, zone: 'desk' | 'bookshelf' | 'server' | 'meeting' | 'lounge' | 'kitchen'): void {
     let target: { col: number; row: number } | null = null
 
     switch (zone) {
@@ -776,6 +776,13 @@ export class OfficeState {
         if (ch.sparkleTimer <= 0) {
           ch.sparkleTimer = 0
           ch.sparkleParticles = undefined
+        }
+      }
+      // Tick emoji reaction timer
+      if (ch.emojiReaction) {
+        ch.emojiReaction.timer -= dt
+        if (ch.emojiReaction.timer <= 0) {
+          ch.emojiReaction = undefined
         }
       }
     }

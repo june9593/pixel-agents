@@ -207,4 +207,6 @@ export interface Character {
   idleElapsed?: number
   /** Saved direction before hover face-user (restored on unhover) */
   _savedDir?: Direction
+  /** Floating emoji reaction (e.g. ☕🍕💰) with countdown timer */
+  emojiReaction?: { emoji: string; timer: number }
 }

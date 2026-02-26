@@ -170,6 +170,71 @@ function EditActionBar({ editor, editorState: es }: { editor: ReturnType<typeof 
   )
 }
 
+/** Floating emoji reactions above characters (React overlay for proper emoji rendering) */
+function EmojiReactions({ officeState, containerRef, zoom, panRef }: {
+  officeState: OfficeState
+  containerRef: React.RefObject<HTMLDivElement | null>
+  zoom: number
+  panRef: React.RefObject<{ x: number; y: number }>
+}) {
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    let rafId = 0
+    const tick = () => { setTick(n => n + 1); rafId = requestAnimationFrame(tick) }
+    rafId = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafId)
+  }, [])
+
+  const el = containerRef.current
+  if (!el) return null
+  const rect = el.getBoundingClientRect()
+  const dpr = window.devicePixelRatio || 1
+  const canvasW = Math.round(rect.width * dpr)
+  const canvasH = Math.round(rect.height * dpr)
+  const layout = officeState.getLayout()
+  const mapW = layout.cols * 16 * zoom
+  const mapH = layout.rows * 16 * zoom
+  const deviceOffsetX = Math.floor((canvasW - mapW) / 2) + Math.round(panRef.current.x)
+  const deviceOffsetY = Math.floor((canvasH - mapH) / 2) + Math.round(panRef.current.y)
+
+  return (
+    <>
+      {Array.from(officeState.characters.values()).map(ch => {
+        if (!ch.emojiReaction) return null
+        const { emoji, timer } = ch.emojiReaction
+        const sittingOffset = ch.state === CharacterState.TYPE ? 6 : 0
+        const screenX = (deviceOffsetX + ch.x * zoom) / dpr
+        const screenY = (deviceOffsetY + (ch.y + sittingOffset - 28) * zoom) / dpr
+
+        // Float upward as timer decreases, fade out in last second
+        const progress = 1 - timer / 3.0
+        const floatY = -progress * 20
+        const opacity = timer < 1.0 ? timer : 1.0
+
+        return (
+          <div
+            key={`emoji-${ch.id}`}
+            style={{
+              position: 'absolute',
+              left: screenX,
+              top: screenY + floatY,
+              transform: 'translateX(-50%)',
+              fontSize: `${Math.max(20, zoom * 8)}px`,
+              opacity,
+              pointerEvents: 'none',
+              zIndex: 150,
+              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))',
+              transition: 'opacity 0.3s',
+            }}
+          >
+            {emoji}
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
 function App() {
   const editor = useEditorActions(getOfficeState, editorState)
 
@@ -199,17 +264,25 @@ function App() {
         // Trigger character animation for game actions
         const os = getOfficeState()
         const agentId = msg.agentId as number
+        const actionEmoji = msg.emoji as string
+        const ch = os.characters.get(agentId)
+
+        // Show floating emoji reaction on the character
+        if (ch && actionEmoji) {
+          ch.emojiReaction = { emoji: actionEmoji, timer: 3.0 }
+        }
+
         if (msg.action === 'tea' || msg.action === 'pizza') {
           // Send to kitchen
-          const ch = os.characters.get(agentId)
           if (ch) {
-            os['sendCharacterToZone'](ch, 'kitchen')
+            os.sendCharacterToZone(ch, 'kitchen')
           }
         } else if (msg.action === 'party') {
-          // Send all idle characters to meeting room
-          for (const ch of os.characters.values()) {
-            if (!ch.isActive && ch.state !== CharacterState.WALK) {
-              os['sendCharacterToZone'](ch, 'meeting')
+          // Send all idle characters to meeting room, each with party emoji
+          for (const c of os.characters.values()) {
+            if (!c.isActive && c.state !== CharacterState.WALK) {
+              os.sendCharacterToZone(c, 'meeting')
+              c.emojiReaction = { emoji: '🎉', timer: 3.0 }
             }
           }
         }
@@ -421,6 +494,14 @@ function App() {
           agentNames={agentNames}
         />
       )}
+
+      {/* Floating emoji reactions */}
+      <EmojiReactions
+        officeState={officeState}
+        containerRef={containerRef}
+        zoom={editor.zoom}
+        panRef={editor.panRef}
+      />
 
       {isDebugMode && (
         <DebugView
