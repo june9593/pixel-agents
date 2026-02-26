@@ -783,6 +783,60 @@ export class OfficeState {
     for (const id of toDelete) {
       this.characters.delete(id)
     }
+
+    // Idle chat system: when two idle characters are near each other,
+    // make them face each other (looks like they're chatting)
+    this.updateIdleChats()
+  }
+
+  /** Track current chat pairs to avoid flickering */
+  private chatPairs: Set<string> = new Set()
+  private chatPairTimer = 0
+
+  private updateIdleChats(): void {
+    this.chatPairTimer += 0.016 // ~60fps dt estimate
+    if (this.chatPairTimer < 2.0) return // check every 2 seconds
+    this.chatPairTimer = 0
+
+    const idleChars: Character[] = []
+    for (const ch of this.characters.values()) {
+      if (!ch.isActive && ch.state === CharacterState.IDLE && !ch.matrixEffect) {
+        idleChars.push(ch)
+      }
+    }
+
+    // Clear old chat pairs
+    this.chatPairs.clear()
+
+    // Find pairs of idle characters within 3 tiles of each other
+    for (let i = 0; i < idleChars.length; i++) {
+      for (let j = i + 1; j < idleChars.length; j++) {
+        const a = idleChars[i]
+        const b = idleChars[j]
+        const dist = Math.abs(a.tileCol - b.tileCol) + Math.abs(a.tileRow - b.tileRow)
+        if (dist <= 3 && dist > 0) {
+          const key = `${Math.min(a.id, b.id)}:${Math.max(a.id, b.id)}`
+          if (!this.chatPairs.has(key)) {
+            this.chatPairs.add(key)
+            // Face each other
+            if (a.tileCol < b.tileCol) {
+              a.dir = Direction.RIGHT
+              b.dir = Direction.LEFT
+            } else if (a.tileCol > b.tileCol) {
+              a.dir = Direction.LEFT
+              b.dir = Direction.RIGHT
+            } else if (a.tileRow < b.tileRow) {
+              a.dir = Direction.DOWN
+              b.dir = Direction.UP
+            } else {
+              a.dir = Direction.UP
+              b.dir = Direction.DOWN
+            }
+          }
+          break // each character can only chat with one other
+        }
+      }
+    }
   }
 
   getCharacters(): Character[] {

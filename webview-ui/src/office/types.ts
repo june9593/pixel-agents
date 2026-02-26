@@ -205,4 +205,6 @@ export interface Character {
   zoneVisitActive?: boolean
   /** Seconds spent continuously idle (for sleepy animation) */
   idleElapsed?: number
+  /** Saved direction before hover face-user (restored on unhover) */
+  _savedDir?: Direction
 }

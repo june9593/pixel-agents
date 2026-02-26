@@ -393,11 +393,21 @@ export function OfficeCanvas({ officeState, onClick, isEditMode, editorState, on
         }
         canvas.style.cursor = cursor
       }
+      // Restore direction of previously hovered character
+      const prevHovered = officeState.hoveredAgentId
+      if (prevHovered !== null && prevHovered !== hitId) {
+        const prevCh = officeState.characters.get(prevHovered)
+        if (prevCh && prevCh._savedDir !== undefined) {
+          prevCh.dir = prevCh._savedDir
+          prevCh._savedDir = undefined
+        }
+      }
       officeState.hoveredAgentId = hitId
-      // When hovering an idle character, make them turn to face the viewer
+      // When hovering an idle/typing character, make them turn to face the viewer
       if (hitId !== null) {
         const ch = officeState.characters.get(hitId)
-        if (ch && !ch.isActive && ch.state !== CharacterState.WALK) {
+        if (ch && ch.state !== CharacterState.WALK && ch._savedDir === undefined) {
+          ch._savedDir = ch.dir
           ch.dir = Direction.DOWN
         }
       }

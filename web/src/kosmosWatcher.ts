@@ -175,8 +175,12 @@ export class KosmosWatcher extends EventEmitter {
         this.watchedAgents.set(agent.chatId, watched)
         console.log(`[KosmosWatcher] Registered agent: ${agent.emoji} ${agent.name} (id=${agentId}, chat=${agent.chatId})`)
 
-        // Emit agent creation
+        // Emit agent creation + name info so webview shows the name immediately
         this.emit('message', { type: 'agentCreated', id: agentId })
+        this.emit('message', {
+          type: 'kosmosAgentInfo',
+          agents: [{ id: agentId, name: agent.name, emoji: agent.emoji }],
+        })
 
         // If there's an existing session, process it for initial state
         if (session) {
