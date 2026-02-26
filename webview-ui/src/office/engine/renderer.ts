@@ -548,6 +548,37 @@ export function renderBubbles(
     ctx.drawImage(cached, bubbleX, bubbleY)
     ctx.restore()
   }
+
+  // Sleepy "Zzz" for characters idle > 30 seconds
+  for (const ch of characters) {
+    if (!ch.idleElapsed || ch.idleElapsed < 30) continue
+    if (ch.bubbleType) continue // don't overlap with speech bubbles
+    if (ch.isActive) continue
+
+    const sittingOff = ch.state === CharacterState.TYPE ? BUBBLE_SITTING_OFFSET_PX : 0
+    const baseX = Math.round(offsetX + ch.x * zoom)
+    const baseY = Math.round(offsetY + (ch.y + sittingOff - 24) * zoom)
+
+    // Floating "z" characters with bobbing animation
+    const elapsed = ch.idleElapsed - 30
+    const fontSize = Math.max(6, Math.round(zoom * 3))
+    ctx.save()
+    ctx.font = `${fontSize}px 'FS Pixel Sans', monospace`
+    ctx.textAlign = 'center'
+
+    for (let i = 0; i < 3; i++) {
+      const t = (elapsed * 0.5 + i * 0.4) % 2.0
+      const floatY = -t * 8 * zoom
+      const alpha = t < 1.5 ? 0.6 : 0.6 * (2.0 - t) / 0.5
+      const size = fontSize - i * Math.round(zoom * 0.5)
+
+      ctx.globalAlpha = alpha
+      ctx.fillStyle = '#aabbee'
+      ctx.font = `${Math.max(4, size)}px 'FS Pixel Sans', monospace`
+      ctx.fillText('z', baseX + (i - 1) * zoom * 3, baseY + floatY - i * zoom * 2)
+    }
+    ctx.restore()
+  }
 }
 
 // ── Sparkle effects ─────────────────────────────────────────────

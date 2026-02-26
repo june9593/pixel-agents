@@ -580,7 +580,7 @@ export class OfficeState {
         } else if (tool === 'WebSearch' || tool === 'WebFetch') {
           this.sendCharacterToZone(ch, 'bookshelf')
         } else if (tool === 'Bash') {
-          this.sendCharacterToZone(ch, 'server')
+          this.sendCharacterToZone(ch, 'kitchen')
         } else if (tool === 'Task') {
           this.sendCharacterToZone(ch, 'meeting')
         } else {
@@ -589,9 +589,15 @@ export class OfficeState {
         }
       }
 
-      // When tool clears, head back to desk
+      // When tool clears, let the character finish their current walk
+      // then return to desk (don't interrupt mid-walk)
       if (!tool && prevTool && ch.isActive) {
-        this.sendCharacterToZone(ch, 'desk')
+        if (ch.state === CharacterState.WALK && ch.zoneVisitActive) {
+          // Character is walking to a zone — let them arrive, then they'll return
+          // zoneVisitActive will trigger return-to-desk when walk completes
+        } else {
+          this.sendCharacterToZone(ch, 'desk')
+        }
       }
     }
   }
@@ -659,6 +665,7 @@ export class OfficeState {
         ch.state = CharacterState.WALK
         ch.frame = 0
         ch.frameTimer = 0
+        ch.zoneVisitActive = zone !== 'desk' // mark as zone visit so we don't get re-pathed
       }
     }
   }

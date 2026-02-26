@@ -79,11 +79,23 @@ export function getThemedWanderTarget(
       return pickZoneTile(MEETING_TILES, walkableTiles)
     }
   }
-  // Idle wandering: alternate between kitchen, lounge, and random
+  // Idle wandering: themed destinations with mini-interactions
   const roll = Math.random()
-  if (roll < 0.3) {
+  if (roll < 0.15) {
+    // Go get coffee near the vending machine / water cooler
+    const coffeeTiles = [
+      { col: 11, row: 12 }, { col: 12, row: 12 }, { col: 13, row: 12 },
+    ]
+    return pickZoneTile(coffeeTiles, walkableTiles)
+  } else if (roll < 0.25) {
+    // Visit a plant (near the potted plants)
+    const plantTiles = [
+      { col: 1, row: 12 }, { col: 10, row: 19 }, { col: 8, row: 1 },
+    ]
+    return pickZoneTile(plantTiles, walkableTiles)
+  } else if (roll < 0.4) {
     return pickZoneTile(KITCHEN_TILES, walkableTiles)
-  } else if (roll < 0.5) {
+  } else if (roll < 0.55) {
     return pickZoneTile(LOUNGE_TILES, walkableTiles)
   }
   // Default: random walkable tile
@@ -164,6 +176,12 @@ export function updateCharacter(
       if (ch.frameTimer >= TYPE_FRAME_DURATION_SEC) {
         ch.frameTimer -= TYPE_FRAME_DURATION_SEC
         ch.frame = (ch.frame + 1) % 2
+      }
+      // Track idle time when not active (for sleepy/nap behavior)
+      if (!ch.isActive) {
+        ch.idleElapsed = (ch.idleElapsed || 0) + dt
+      } else {
+        ch.idleElapsed = 0
       }
       // If no longer active, stand up and start wandering (after seatTimer expires)
       if (!ch.isActive) {
@@ -263,8 +281,13 @@ export function updateCharacter(
         ch.y = center.y
 
         if (ch.isActive) {
-          if (!ch.seatId) {
-            // No seat — type in place
+          if (ch.zoneVisitActive) {
+            // Arrived at zone destination — clear flag and return to desk
+            ch.zoneVisitActive = false
+            ch.state = CharacterState.IDLE
+            ch.wanderTimer = 0.5 // brief pause before returning
+          } else if (!ch.seatId) {
+            // No seat assigned — type in place
             ch.state = CharacterState.TYPE
           } else {
             const seat = seats.get(ch.seatId)
@@ -327,7 +350,8 @@ export function updateCharacter(
       }
 
       // If became active while wandering, repath to seat
-      if (ch.isActive && ch.seatId) {
+      // BUT skip if character is on a zone visit (let them finish the walk)
+      if (ch.isActive && ch.seatId && !ch.zoneVisitActive) {
         const seat = seats.get(ch.seatId)
         if (seat) {
           const lastStep = ch.path[ch.path.length - 1]

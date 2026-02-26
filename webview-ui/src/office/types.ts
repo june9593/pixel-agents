@@ -201,4 +201,8 @@ export interface Character {
   sparkleTimer?: number
   /** Sparkle particle positions (pre-generated on trigger) */
   sparkleParticles?: Array<{ x: number; y: number; delay: number }>
+  /** Whether the character is on a zone visit (don't repath to seat mid-walk) */
+  zoneVisitActive?: boolean
+  /** Seconds spent continuously idle (for sleepy animation) */
+  idleElapsed?: number
 }
