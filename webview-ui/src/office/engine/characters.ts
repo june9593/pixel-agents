@@ -148,11 +148,11 @@ export function createCharacter(
     wanderTimer: 0,
     wanderCount: 0,
     wanderLimit: randomInt(WANDER_MOVES_BEFORE_REST_MIN, WANDER_MOVES_BEFORE_REST_MAX),
-    isActive: true,
+    isActive: false, // start idle; will be set active when agent begins working
     seatId,
     bubbleType: null,
     bubbleTimer: 0,
-    seatTimer: 0,
+    seatTimer: randomRange(2, 8), // stagger initial stand-up so they don't all move at once
     isSubagent: false,
     parentAgentId: null,
     matrixEffect: null,
