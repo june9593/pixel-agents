@@ -311,14 +311,15 @@ export class KosmosWatcher extends EventEmitter {
         this.processSessionFile(watched)
       }
 
-      // Detect stale active agents: if the agent has active tools but the
-      // session file hasn't been updated in 15 seconds, the conversation
-      // was likely interrupted. Force the agent to idle.
+      // Detect stale/interrupted conversations:
+      // If the agent is not marked as waiting (still considered "working")
+      // but the session file hasn't been updated in 15 seconds,
+      // the conversation was likely interrupted. Force the agent to idle.
       const STALE_THRESHOLD_MS = 15000
-      if (watched.translationState.activeToolIds.size > 0) {
+      if (!watched.translationState.isWaiting) {
         const staleDuration = Date.now() - watched.lastFileModified
         if (staleDuration > STALE_THRESHOLD_MS) {
-          console.log(`[KosmosWatcher] Agent ${watched.agent.name} appears stale (${Math.round(staleDuration / 1000)}s), forcing idle`)
+          console.log(`[KosmosWatcher] Agent ${watched.agent.name} appears stale (${Math.round(staleDuration / 1000)}s no updates), forcing idle`)
           watched.translationState.activeToolIds.clear()
           watched.translationState.activeTaskToolIds.clear()
           watched.translationState.isWaiting = true
