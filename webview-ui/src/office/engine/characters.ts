@@ -303,6 +303,15 @@ export function updateCharacter(
             }
           }
         } else {
+          // If on a zone visit (e.g. tea/pizza), linger at destination
+          if (ch.zoneVisitActive) {
+            ch.zoneVisitActive = false
+            ch.state = CharacterState.IDLE
+            ch.wanderTimer = randomRange(8, 15) // stay 8-15 seconds at the spot
+            ch.frame = 0
+            ch.frameTimer = 0
+            break
+          }
           // Check if arrived at assigned seat — sit down for a rest before wandering again
           if (ch.seatId) {
             const seat = seats.get(ch.seatId)

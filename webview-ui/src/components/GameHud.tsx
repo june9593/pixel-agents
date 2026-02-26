@@ -5,6 +5,8 @@ interface GameHudProps {
   coins: number
   /** Function that returns current selectedAgentId from officeState */
   getSelectedAgentId: () => number | null
+  /** Function to check if an agent is idle (not active) */
+  isAgentIdle: (id: number) => boolean
   agentProfiles: Record<number, AgentProfileData>
 }
 
@@ -79,7 +81,7 @@ const btnStyle: React.CSSProperties = {
   textAlign: 'left',
 }
 
-export function GameHud({ coins, getSelectedAgentId, agentProfiles }: GameHudProps) {
+export function GameHud({ coins, getSelectedAgentId, isAgentIdle, agentProfiles }: GameHudProps) {
   const [notifications, setNotifications] = useState<GameNotification[]>([])
   const [showMenu, setShowMenu] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
@@ -198,16 +200,21 @@ export function GameHud({ coins, getSelectedAgentId, agentProfiles }: GameHudPro
       </div>
 
       {/* Interaction menu */}
-      {showMenu && selectedAgentId !== null && profile && (
+      {showMenu && selectedAgentId !== null && profile && (() => {
+        const agentIdle = isAgentIdle(selectedAgentId)
+        return (
         <div style={{ ...menuStyle, top: 48, right: 8 }}>
           <div style={{ padding: '4px 8px', fontSize: '18px', opacity: 0.6, borderBottom: '1px solid var(--pixel-border)', marginBottom: 4 }}>
             {profile.emoji} {profile.name} - {profile.rank}
+            {!agentIdle && <span style={{ color: '#e09050', marginLeft: 6 }}>(working...)</span>}
           </div>
           {ACTIONS.map(a => {
             const canAfford = coins >= a.cost
             const isPromote = a.type === 'promote'
             const needMore = isPromote && profile.totalToolCalls < 50
-            const disabled = !canAfford || needMore
+            const isParty = a.type === 'party' // party works even when busy
+            const needsIdle = !isParty && !agentIdle
+            const disabled = !canAfford || needMore || needsIdle
             return (
               <button
                 key={a.type}
@@ -221,7 +228,7 @@ export function GameHud({ coins, getSelectedAgentId, agentProfiles }: GameHudPro
                   background: hoveredAction === a.type && !disabled ? 'rgba(255,255,255,0.08)' : 'transparent',
                 }}
               >
-                <span>{a.label}</span>
+                <span>{a.label}{needsIdle ? ' 🔒' : ''}</span>
                 <span style={{ color: canAfford ? '#FFD700' : '#e06060', fontSize: '18px' }}>{a.cost}🪙</span>
               </button>
             )
@@ -232,7 +239,8 @@ export function GameHud({ coins, getSelectedAgentId, agentProfiles }: GameHudPro
             </div>
           )}
         </div>
-      )}
+        )
+      })()}
 
       {/* Agent profile panel */}
       {showProfile && selectedAgentId !== null && profile && (

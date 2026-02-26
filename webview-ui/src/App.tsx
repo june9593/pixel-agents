@@ -249,6 +249,10 @@ function App() {
 
   const handleToggleDebugMode = useCallback(() => setIsDebugMode((prev) => !prev), [])
   const getSelectedAgentId = useCallback(() => getOfficeState().selectedAgentId, [])
+  const isAgentIdle = useCallback((id: number) => {
+    const ch = getOfficeState().characters.get(id)
+    return ch ? !ch.isActive : true
+  }, [])
   const handleToggleNameLabels = useCallback(() => setShowNameLabels((prev) => !prev), [])
 
   // Listen for game state updates from server
@@ -273,16 +277,16 @@ function App() {
         }
 
         if (msg.action === 'tea' || msg.action === 'pizza') {
-          // Send to kitchen
-          if (ch) {
+          // Send to kitchen (only if idle)
+          if (ch && !ch.isActive) {
             os.sendCharacterToZone(ch, 'kitchen')
           }
         } else if (msg.action === 'party') {
-          // Send all idle characters to meeting room, each with party emoji
+          // Send ALL characters to meeting room for party
           for (const c of os.characters.values()) {
-            if (!c.isActive && c.state !== CharacterState.WALK) {
+            if (c.state !== CharacterState.WALK) {
               os.sendCharacterToZone(c, 'meeting')
-              c.emojiReaction = { emoji: '🎉', timer: 3.0 }
+              c.emojiReaction = { emoji: '🎉', timer: 4.0 }
             }
           }
         }
@@ -517,6 +521,7 @@ function App() {
       <GameHud
         coins={gameCoins}
         getSelectedAgentId={getSelectedAgentId}
+        isAgentIdle={isAgentIdle}
         agentProfiles={agentProfiles}
       />
     </div>
