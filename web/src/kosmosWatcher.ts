@@ -30,8 +30,7 @@ export interface WatchedAgent {
   session: KosmosSessionInfo | null
   translationState: TranslationState
   lastSessionCheck: number
-  /** Timestamp of last new message processed (for stale detection) */
-  lastActivityTime: number
+  lastFileModified: number // timestamp of last file change (for stale detection)
 }
 
 export interface KosmosWatcherOptions {
@@ -172,7 +171,7 @@ export class KosmosWatcher extends EventEmitter {
           session,
           translationState: createTranslationState(),
           lastSessionCheck: Date.now(),
-          lastActivityTime: Date.now(),
+          lastFileModified: Date.now(),
         }
 
         this.watchedAgents.set(agent.chatId, watched)
@@ -203,7 +202,6 @@ export class KosmosWatcher extends EventEmitter {
         console.log(`[KosmosWatcher] New session for ${watched.agent.name}: ${session.sessionId}`)
         watched.session = session
         watched.translationState = createTranslationState()
-        watched.lastActivityTime = Date.now()
         // Clear old tools and reprocess
         this.emit('message', { type: 'agentToolsClear', id: watched.agentId })
         this.processSessionFile(watched)
@@ -249,16 +247,26 @@ export class KosmosWatcher extends EventEmitter {
     if (!watched.session) return
 
     try {
+      // Check file mtime to detect changes
+      const stat = fs.statSync(watched.session.filePath)
+      const mtime = stat.mtimeMs
+
       const content = fs.readFileSync(watched.session.filePath, 'utf-8')
       const session: KosmosChatSession = JSON.parse(content)
 
       if (!Array.isArray(session.chat_history)) return
 
+      const prevCount = watched.translationState.processedCount
       const newMessages = translateNewMessages(
         watched.agentId,
         session.chat_history,
         watched.translationState,
       )
+
+      // If new messages were generated, update the file modification timestamp
+      if (watched.translationState.processedCount > prevCount) {
+        watched.lastFileModified = mtime
+      }
 
       // Update session title if changed
       if (session.title && watched.session.title !== session.title) {
@@ -267,17 +275,13 @@ export class KosmosWatcher extends EventEmitter {
 
       for (const msg of newMessages) {
         if (msg._delay) {
+          // Delay subagentClear so the character is visible briefly
           const delayedMsg = { ...msg }
           delete delayedMsg._delay
           setTimeout(() => this.emit('message', delayedMsg), 2000)
         } else {
           this.emit('message', msg)
         }
-      }
-
-      // Track activity time when new messages were emitted
-      if (newMessages.length > 0) {
-        watched.lastActivityTime = Date.now()
       }
     } catch (err) {
       // File might be in the middle of being written
@@ -307,24 +311,20 @@ export class KosmosWatcher extends EventEmitter {
         this.processSessionFile(watched)
       }
 
-      // Stale detection: if agent has active tools but no new messages
-      // for 10 seconds, assume conversation was interrupted and force waiting
-      const state = watched.translationState
-      if (!state.isWaiting && state.activeToolIds.size === 0
-          && Date.now() - watched.lastActivityTime > 10000) {
-        console.log(`[KosmosWatcher] Stale detected for ${watched.agent.name}, forcing waiting`)
-        state.isWaiting = true
-        this.emit('message', { type: 'agentStatus', id: watched.agentId, status: 'waiting' })
-      }
-      // Also handle case where tools are still marked active but session stopped
-      if (state.activeToolIds.size > 0
-          && Date.now() - watched.lastActivityTime > 10000) {
-        console.log(`[KosmosWatcher] Clearing stale tools for ${watched.agent.name}`)
-        state.activeToolIds.clear()
-        state.activeTaskToolIds.clear()
-        state.isWaiting = true
-        this.emit('message', { type: 'agentToolsClear', id: watched.agentId })
-        this.emit('message', { type: 'agentStatus', id: watched.agentId, status: 'waiting' })
+      // Detect stale active agents: if the agent has active tools but the
+      // session file hasn't been updated in 15 seconds, the conversation
+      // was likely interrupted. Force the agent to idle.
+      const STALE_THRESHOLD_MS = 15000
+      if (watched.translationState.activeToolIds.size > 0) {
+        const staleDuration = Date.now() - watched.lastFileModified
+        if (staleDuration > STALE_THRESHOLD_MS) {
+          console.log(`[KosmosWatcher] Agent ${watched.agent.name} appears stale (${Math.round(staleDuration / 1000)}s), forcing idle`)
+          watched.translationState.activeToolIds.clear()
+          watched.translationState.activeTaskToolIds.clear()
+          watched.translationState.isWaiting = true
+          this.emit('message', { type: 'agentToolsClear', id: watched.agentId })
+          this.emit('message', { type: 'agentStatus', id: watched.agentId, status: 'waiting' })
+        }
       }
     }
   }
