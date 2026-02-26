@@ -647,8 +647,7 @@ export function renderFrame(
   // Speech bubbles (always on top of characters)
   renderBubbles(ctx, characters, offsetX, offsetY, zoom)
 
-  // Name labels (always visible, below bubbles)
-  renderNameLabels(ctx, characters, offsetX, offsetY, zoom)
+  // Name labels rendered via React overlay (not canvas) for emoji support
 
   // Editor overlays
   if (editor) {

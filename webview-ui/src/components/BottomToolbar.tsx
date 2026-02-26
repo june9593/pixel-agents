@@ -7,6 +7,8 @@ interface BottomToolbarProps {
   onToggleEditMode: () => void
   isDebugMode: boolean
   onToggleDebugMode: () => void
+  showNameLabels: boolean
+  onToggleNameLabels: () => void
 }
 
 const panelStyle: React.CSSProperties = {
@@ -47,6 +49,8 @@ export function BottomToolbar({
   onToggleEditMode,
   isDebugMode,
   onToggleDebugMode,
+  showNameLabels,
+  onToggleNameLabels,
 }: BottomToolbarProps) {
   const [hovered, setHovered] = useState<string | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -108,6 +112,8 @@ export function BottomToolbar({
           onClose={() => setIsSettingsOpen(false)}
           isDebugMode={isDebugMode}
           onToggleDebugMode={onToggleDebugMode}
+          showNameLabels={showNameLabels}
+          onToggleNameLabels={onToggleNameLabels}
         />
       </div>
     </div>

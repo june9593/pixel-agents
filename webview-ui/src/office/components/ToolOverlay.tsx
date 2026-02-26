@@ -90,11 +90,8 @@ export function ToolOverlay({
         const isHovered = hoveredId === id
         const isSub = ch.isSubagent
 
-        // In web mode: show overlay for any active agent (working turn in progress)
-        // In VS Code mode: only show for hovered or selected (original behavior)
-        const hasActiveTools = agentTools[id]?.some((t) => !t.done)
-        const shouldShow = isSelected || isHovered || (isWebMode && (ch.isActive || hasActiveTools))
-        if (!shouldShow) return null
+        // Only show for hovered or selected agents
+        if (!isSelected && !isHovered) return null
 
         // Position above character
         const sittingOffset = ch.state === CharacterState.TYPE ? CHARACTER_SITTING_OFFSET_PX : 0
@@ -118,13 +115,13 @@ export function ToolOverlay({
         // Determine dot color
         const tools = agentTools[id]
         const hasPermission = subHasPermission || tools?.some((t) => t.permissionWait && !t.done)
-        const hasToolsRunning = tools?.some((t) => !t.done)
+        const hasActiveTools = tools?.some((t) => !t.done)
         const isActive = ch.isActive
 
         let dotColor: string | null = null
         if (hasPermission) {
           dotColor = 'var(--pixel-status-permission)'
-        } else if (isActive && hasToolsRunning) {
+        } else if (isActive && hasActiveTools) {
           dotColor = 'var(--pixel-status-active)'
         }
 
