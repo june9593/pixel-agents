@@ -90,8 +90,11 @@ export function ToolOverlay({
         const isHovered = hoveredId === id
         const isSub = ch.isSubagent
 
-        // Only show for hovered or selected agents
-        if (!isSelected && !isHovered) return null
+        // In web mode: show overlay for any active agent (working turn in progress)
+        // In VS Code mode: only show for hovered or selected (original behavior)
+        const isWorking = ch.isActive || agentTools[id]?.some((t) => !t.done)
+        const shouldShow = isSelected || isHovered || (isWebMode && isWorking)
+        if (!shouldShow) return null
 
         // Position above character
         const sittingOffset = ch.state === CharacterState.TYPE ? CHARACTER_SITTING_OFFSET_PX : 0
