@@ -170,7 +170,7 @@ export function GameHud({ coins, getSelectedAgentId, agentProfiles }: GameHudPro
           <>
             <span style={{ margin: '0 4px', opacity: 0.3 }}>|</span>
             <button
-              onClick={() => setShowMenu(!showMenu)}
+              onClick={() => { setShowMenu(!showMenu); setShowProfile(false) }}
               style={{
                 ...btnStyle,
                 width: 'auto',
@@ -182,7 +182,7 @@ export function GameHud({ coins, getSelectedAgentId, agentProfiles }: GameHudPro
               🎁 互动
             </button>
             <button
-              onClick={() => setShowProfile(!showProfile)}
+              onClick={() => { setShowProfile(!showProfile); setShowMenu(false) }}
               style={{
                 ...btnStyle,
                 width: 'auto',
