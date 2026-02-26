@@ -374,12 +374,15 @@ watcher.on('message', (msg) => {
           achievement: { id: ach.id, name: ach.name, emoji: ach.emoji, description: ach.description },
         })
       }
+      // Broadcast full game state so profiles update in real-time
+      broadcast({ type: 'gameUpdate', ...getGameSummary(gameState) })
     }
   }
 
   // Reset combo on turn end
   if (msg.type === 'agentStatus' && msg.status === 'waiting' && !msg._replay) {
     recordTurnEnd(gameState, msg.id as number)
+    broadcast({ type: 'gameUpdate', ...getGameSummary(gameState) })
   }
 })
 
