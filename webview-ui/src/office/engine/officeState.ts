@@ -160,9 +160,20 @@ export class OfficeState {
   }
 
   private findFreeSeat(): string | null {
+    // Prefer seats in the main work area (rows 14-19, cols 1-9) — these have desks
+    const workAreaSeats: string[] = []
+    const otherSeats: string[] = []
     for (const [uid, seat] of this.seats) {
-      if (!seat.assigned) return uid
+      if (!seat.assigned) {
+        if (seat.seatRow >= 14 && seat.seatRow <= 19 && seat.seatCol >= 1 && seat.seatCol <= 9) {
+          workAreaSeats.push(uid)
+        } else {
+          otherSeats.push(uid)
+        }
+      }
     }
+    if (workAreaSeats.length > 0) return workAreaSeats[0]
+    if (otherSeats.length > 0) return otherSeats[0]
     return null
   }
 
@@ -496,12 +507,15 @@ export class OfficeState {
     if (ch) {
       ch.isActive = active
       if (!active) {
-        // Turn ended — send character to relax in the lounge/kitchen
+        // Turn ended — stay at desk for a bit, then wander naturally
+        // (the TYPE→IDLE transition in updateCharacter handles the rest)
         ch.seatTimer = -1
         ch.path = []
         ch.moveProgress = 0
-        // Navigate to a relaxation spot
-        this.sendCharacterToZone(ch, 'lounge')
+        ch.zoneVisitActive = false
+        ch.idleElapsed = 0
+      } else {
+        ch.idleElapsed = 0
       }
       this.rebuildFurnitureInstances()
     }
@@ -580,7 +594,8 @@ export class OfficeState {
         } else if (tool === 'WebSearch' || tool === 'WebFetch') {
           this.sendCharacterToZone(ch, 'bookshelf')
         } else if (tool === 'Bash') {
-          this.sendCharacterToZone(ch, 'kitchen')
+          // Bash/command execution — stay at desk (terminal work)
+          this.sendCharacterToZone(ch, 'desk')
         } else if (tool === 'Task') {
           this.sendCharacterToZone(ch, 'meeting')
         } else {

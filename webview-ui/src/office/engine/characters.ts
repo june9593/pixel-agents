@@ -204,6 +204,10 @@ export function updateCharacter(
       // No idle animation — static pose
       ch.frame = 0
       if (ch.seatTimer < 0) ch.seatTimer = 0 // clear turn-end sentinel
+      // Track idle time for sleepy animation
+      if (!ch.isActive) {
+        ch.idleElapsed = (ch.idleElapsed || 0) + dt
+      }
       // If became active, pathfind to seat
       if (ch.isActive) {
         if (!ch.seatId) {

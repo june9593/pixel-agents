@@ -549,9 +549,9 @@ export function renderBubbles(
     ctx.restore()
   }
 
-  // Sleepy "Zzz" for characters idle > 30 seconds
+  // Sleepy "Zzz" for characters idle > 15 seconds
   for (const ch of characters) {
-    if (!ch.idleElapsed || ch.idleElapsed < 30) continue
+    if (!ch.idleElapsed || ch.idleElapsed < 15) continue
     if (ch.bubbleType) continue // don't overlap with speech bubbles
     if (ch.isActive) continue
 

@@ -4,7 +4,7 @@ import type { EditorState } from '../editor/editorState.js'
 import type { EditorRenderState, SelectionRenderState, DeleteButtonBounds, RotateButtonBounds } from '../engine/renderer.js'
 import { startGameLoop } from '../engine/gameLoop.js'
 import { renderFrame } from '../engine/renderer.js'
-import { TILE_SIZE, EditTool } from '../types.js'
+import { TILE_SIZE, EditTool, CharacterState, Direction } from '../types.js'
 import { CAMERA_FOLLOW_LERP, CAMERA_FOLLOW_SNAP_THRESHOLD, ZOOM_MIN, ZOOM_MAX, ZOOM_SCROLL_THRESHOLD, PAN_MARGIN_FRACTION } from '../../constants.js'
 import { getCatalogEntry, isRotatable } from '../layout/furnitureCatalog.js'
 import { canPlaceFurniture, getWallPlacementRow } from '../editor/editorActions.js'
@@ -394,6 +394,13 @@ export function OfficeCanvas({ officeState, onClick, isEditMode, editorState, on
         canvas.style.cursor = cursor
       }
       officeState.hoveredAgentId = hitId
+      // When hovering an idle character, make them turn to face the viewer
+      if (hitId !== null) {
+        const ch = officeState.characters.get(hitId)
+        if (ch && !ch.isActive && ch.state !== CharacterState.WALK) {
+          ch.dir = Direction.DOWN
+        }
+      }
     },
     [officeState, screenToWorld, screenToTile, isEditMode, editorState, onEditorTileAction, onEditorEraseAction, panRef, hitTestDeleteButton, hitTestRotateButton, clampPan],
   )
