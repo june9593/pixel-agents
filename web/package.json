@@ -2,9 +2,14 @@
   "name": "pixel-kosmos",
   "version": "1.0.0",
   "type": "module",
-  "description": "Pixel art office visualization for kosmos-app AI agents",
-  "keywords": ["pixel-art", "kosmos", "ai-agents", "visualization"],
+  "description": "Pixel art office visualization for kosmos-app AI agents - watch your AI agents work in a cozy pixel office",
+  "keywords": ["pixel-art", "kosmos", "ai-agents", "visualization", "pixel-office", "game"],
   "license": "MIT",
+  "author": "Yue Liu",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pablodelucca/pixel-agents"
+  },
   "bin": {
     "pixel-kosmos": "./bin/cli.js"
   },
@@ -18,16 +23,17 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
-    "build": "npm run build:webview && npm run build:server && npm run copy-assets",
-    "build:webview": "cd ../webview-ui && npx vite build",
+    "build": "npm run build:server && npm run build:webview-prod && npm run copy-assets",
     "build:server": "npx tsc -p tsconfig.build.json",
-    "copy-assets": "cp -r ../dist/webview dist/webview",
+    "build:webview-prod": "cd ../webview-ui && npx vite build",
+    "copy-assets": "mkdir -p dist/webview && cp -r ../dist/webview/* dist/webview/",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "chokidar": "^4.0.0",
     "express": "^4.21.0",
     "pngjs": "^7.0.0",
+    "tsx": "^4.19.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
@@ -35,7 +41,6 @@
     "@types/node": "^22.0.0",
     "@types/pngjs": "^6.0.5",
     "@types/ws": "^8.5.12",
-    "tsx": "^4.19.0",
     "typescript": "~5.9.3"
   }
 }

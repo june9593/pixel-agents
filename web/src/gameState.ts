@@ -255,8 +255,9 @@ export function performAction(
   }
 
   if (action === 'promote') {
-    if (profile.totalToolCalls < config.requireToolCalls) {
-      return { success: false, reason: `Need ${config.requireToolCalls} tool calls for promotion` }
+    const promoteConfig = ACTIONS.promote
+    if (profile.totalToolCalls < promoteConfig.requireToolCalls) {
+      return { success: false, reason: `Need ${promoteConfig.requireToolCalls} tool calls for promotion` }
     }
     if (profile.rankIndex >= RANKS.length - 1) {
       return { success: false, reason: 'Already at max rank' }
