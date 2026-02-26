@@ -384,6 +384,29 @@ watcher.on('message', (msg) => {
     recordTurnEnd(gameState, msg.id as number)
     broadcast({ type: 'gameUpdate', ...getGameSummary(gameState) })
   }
+
+  // Text-only response counts as a light task (no mood penalty, +2 coins)
+  if (msg.type === 'agentTextResponse' && !msg._replay) {
+    const agentId = msg.id as number
+    const watched = watcher.getAgents().find(a => a.agentId === agentId)
+    if (watched) {
+      ensureAgentProfile(gameState, agentId, watched.agent.name, watched.agent.emoji)
+      const profile = gameState.agents[agentId]
+      if (profile) {
+        if (profile.lastActiveDate !== new Date().toISOString().slice(0, 10)) {
+          profile.todayToolCalls = 0
+          profile.lastActiveDate = new Date().toISOString().slice(0, 10)
+        }
+        profile.totalToolCalls++
+        profile.todayToolCalls++
+        // Light task: earn 2 coins, no mood penalty
+        gameState.coins += 2
+        gameState.totalCoinsEarned += 2
+        saveGameState(gameState)
+        broadcast({ type: 'gameUpdate', ...getGameSummary(gameState) })
+      }
+    }
+  }
 })
 
 // ── Start Server ───────────────────────────────────────────────

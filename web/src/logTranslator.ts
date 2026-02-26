@@ -257,16 +257,18 @@ function translateEntry(
           })
         }
       } else {
-        // Text-only assistant response
-        if (state.isWaiting) {
-          // Already waiting — do nothing
-        } else {
-          messages.push({
-            type: 'agentStatus',
-            id: agentId,
-            status: 'active',
-          })
-        }
+        // Text-only assistant response — briefly mark as active
+        state.isWaiting = false
+        messages.push({
+          type: 'agentStatus',
+          id: agentId,
+          status: 'active',
+        })
+        // Also emit a text response event for game tracking
+        messages.push({
+          type: 'agentTextResponse',
+          id: agentId,
+        })
       }
       break
     }
