@@ -3,7 +3,8 @@ import { vscode, isWebMode } from '../vscodeApi.js'
 
 interface GameHudProps {
   coins: number
-  selectedAgentId: number | null
+  /** Function that returns current selectedAgentId from officeState */
+  getSelectedAgentId: () => number | null
   agentProfiles: Record<number, AgentProfileData>
 }
 
@@ -78,12 +79,28 @@ const btnStyle: React.CSSProperties = {
   textAlign: 'left',
 }
 
-export function GameHud({ coins, selectedAgentId, agentProfiles }: GameHudProps) {
+export function GameHud({ coins, getSelectedAgentId, agentProfiles }: GameHudProps) {
   const [notifications, setNotifications] = useState<GameNotification[]>([])
   const [showMenu, setShowMenu] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
   const [hoveredAction, setHoveredAction] = useState<string | null>(null)
   const [lastResult, setLastResult] = useState<string | null>(null)
+  const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null)
+
+  // Poll officeState.selectedAgentId since it's imperative (not React state)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const current = getSelectedAgentId()
+      setSelectedAgentId(prev => prev !== current ? current : prev)
+    }, 100)
+    return () => clearInterval(timer)
+  }, [getSelectedAgentId])
+
+  // Close menus when selection changes
+  useEffect(() => {
+    setShowMenu(false)
+    setShowProfile(false)
+  }, [selectedAgentId])
 
   if (!isWebMode) return null
 

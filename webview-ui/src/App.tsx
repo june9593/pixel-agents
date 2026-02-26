@@ -434,7 +434,7 @@ function App() {
 
       <GameHud
         coins={gameCoins}
-        selectedAgentId={officeState.selectedAgentId}
+        getSelectedAgentId={() => officeState.selectedAgentId}
         agentProfiles={agentProfiles}
       />
     </div>
