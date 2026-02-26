@@ -550,6 +550,52 @@ export function renderBubbles(
   }
 }
 
+// ── Sparkle effects ─────────────────────────────────────────────
+
+const SPARKLE_COLORS = ['#FFD700', '#FFF8DC', '#FFFACD', '#FFE4B5', '#FFFFFF']
+
+export function renderSparkles(
+  ctx: CanvasRenderingContext2D,
+  characters: Character[],
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+): void {
+  for (const ch of characters) {
+    if (!ch.sparkleTimer || ch.sparkleTimer <= 0 || !ch.sparkleParticles) continue
+
+    const sittingOffset = ch.state === CharacterState.TYPE ? CHARACTER_SITTING_OFFSET_PX : 0
+    const baseX = offsetX + ch.x * zoom
+    const baseY = offsetY + (ch.y + sittingOffset - 12) * zoom
+
+    const elapsed = 2.0 - ch.sparkleTimer
+    ctx.save()
+
+    for (const p of ch.sparkleParticles) {
+      const t = Math.max(0, elapsed - p.delay)
+      if (t <= 0) continue
+
+      // Float upward and fade out
+      const progress = Math.min(t / 1.5, 1)
+      const alpha = 1 - progress
+      const floatY = -progress * 12 * zoom
+      const size = Math.max(1, Math.round(zoom * (1 - progress * 0.5)))
+
+      const sx = baseX + p.x * zoom
+      const sy = baseY + p.y * zoom + floatY
+
+      ctx.globalAlpha = alpha * 0.9
+      ctx.fillStyle = SPARKLE_COLORS[Math.floor(Math.random() * SPARKLE_COLORS.length)]
+
+      // Draw a tiny cross/star shape
+      ctx.fillRect(sx - size, sy, size * 2 + 1, 1)
+      ctx.fillRect(sx, sy - size, 1, size * 2 + 1)
+    }
+
+    ctx.restore()
+  }
+}
+
 export interface ButtonBounds {
   /** Center X in device pixels */
   cx: number
@@ -646,6 +692,9 @@ export function renderFrame(
 
   // Speech bubbles (always on top of characters)
   renderBubbles(ctx, characters, offsetX, offsetY, zoom)
+
+  // Sparkle effects (task completion celebration)
+  renderSparkles(ctx, characters, offsetX, offsetY, zoom)
 
   // Name labels rendered via React overlay (not canvas) for emoji support
 

@@ -496,11 +496,12 @@ export class OfficeState {
     if (ch) {
       ch.isActive = active
       if (!active) {
-        // Sentinel -1: signals turn just ended, skip next seat rest timer.
-        // Prevents the WALK handler from setting a 2-4 min rest on arrival.
+        // Turn ended — send character to relax in the lounge/kitchen
         ch.seatTimer = -1
         ch.path = []
         ch.moveProgress = 0
+        // Navigate to a relaxation spot
+        this.sendCharacterToZone(ch, 'lounge')
       }
       this.rebuildFurnitureInstances()
     }
@@ -569,8 +570,104 @@ export class OfficeState {
   setAgentTool(id: number, tool: string | null): void {
     const ch = this.characters.get(id)
     if (ch) {
+      const prevTool = ch.currentTool
       ch.currentTool = tool
+
+      // When a new tool starts, optionally send the character somewhere interesting
+      if (tool && tool !== prevTool && ch.isActive) {
+        if (tool === 'Read' || tool === 'Grep' || tool === 'Glob') {
+          this.sendCharacterToZone(ch, 'bookshelf')
+        } else if (tool === 'WebSearch' || tool === 'WebFetch') {
+          this.sendCharacterToZone(ch, 'bookshelf')
+        } else if (tool === 'Bash') {
+          this.sendCharacterToZone(ch, 'server')
+        } else if (tool === 'Task') {
+          this.sendCharacterToZone(ch, 'meeting')
+        } else {
+          // Write and other tools → go back to desk
+          this.sendCharacterToZone(ch, 'desk')
+        }
+      }
+
+      // When tool clears, head back to desk
+      if (!tool && prevTool && ch.isActive) {
+        this.sendCharacterToZone(ch, 'desk')
+      }
     }
+  }
+
+  /** Navigate a character to a themed zone in the office */
+  private sendCharacterToZone(ch: Character, zone: 'desk' | 'bookshelf' | 'server' | 'meeting' | 'lounge' | 'kitchen'): void {
+    let target: { col: number; row: number } | null = null
+
+    switch (zone) {
+      case 'desk': {
+        // Go back to assigned seat
+        if (ch.seatId) {
+          const seat = this.seats.get(ch.seatId)
+          if (seat) target = { col: seat.seatCol, row: seat.seatRow }
+        }
+        break
+      }
+      case 'bookshelf': {
+        const tiles = [
+          { col: 1, row: 12 }, { col: 2, row: 12 }, { col: 3, row: 12 },
+          { col: 5, row: 12 }, { col: 7, row: 12 }, { col: 8, row: 12 }, { col: 9, row: 12 },
+        ]
+        target = this.pickWalkableFromZone(tiles)
+        break
+      }
+      case 'server': {
+        const tiles = [
+          { col: 3, row: 19 }, { col: 2, row: 19 }, { col: 4, row: 19 },
+        ]
+        target = this.pickWalkableFromZone(tiles)
+        break
+      }
+      case 'meeting': {
+        const tiles = [
+          { col: 5, row: 4 }, { col: 5, row: 5 }, { col: 6, row: 5 },
+          { col: 6, row: 6 }, { col: 5, row: 6 },
+        ]
+        target = this.pickWalkableFromZone(tiles)
+        break
+      }
+      case 'lounge': {
+        const tiles = [
+          { col: 14, row: 18 }, { col: 15, row: 18 }, { col: 16, row: 18 },
+          { col: 17, row: 18 }, { col: 18, row: 18 },
+          { col: 15, row: 19 }, { col: 16, row: 19 },
+        ]
+        target = this.pickWalkableFromZone(tiles)
+        break
+      }
+      case 'kitchen': {
+        const tiles = [
+          { col: 12, row: 12 }, { col: 13, row: 12 }, { col: 14, row: 12 },
+          { col: 15, row: 12 }, { col: 16, row: 12 },
+        ]
+        target = this.pickWalkableFromZone(tiles)
+        break
+      }
+    }
+
+    if (target) {
+      const path = findPath(ch.tileCol, ch.tileRow, target.col, target.row, this.tileMap, this.blockedTiles)
+      if (path.length > 0) {
+        ch.path = path
+        ch.moveProgress = 0
+        ch.state = CharacterState.WALK
+        ch.frame = 0
+        ch.frameTimer = 0
+      }
+    }
+  }
+
+  /** Pick a random walkable tile from a zone */
+  private pickWalkableFromZone(tiles: Array<{ col: number; row: number }>): { col: number; row: number } | null {
+    const valid = tiles.filter(t => this.walkableTiles.some(w => w.col === t.col && w.row === t.row))
+    if (valid.length > 0) return valid[Math.floor(Math.random() * valid.length)]
+    return null
   }
 
   showPermissionBubble(id: number): void {
@@ -594,6 +691,13 @@ export class OfficeState {
     if (ch) {
       ch.bubbleType = 'waiting'
       ch.bubbleTimer = WAITING_BUBBLE_DURATION_SEC
+      // Trigger sparkle celebration effect
+      ch.sparkleTimer = 2.0
+      ch.sparkleParticles = Array.from({ length: 6 }, () => ({
+        x: (Math.random() - 0.5) * 20,
+        y: -Math.random() * 16 - 8,
+        delay: Math.random() * 0.5,
+      }))
     }
   }
 
@@ -641,6 +745,15 @@ export class OfficeState {
         if (ch.bubbleTimer <= 0) {
           ch.bubbleType = null
           ch.bubbleTimer = 0
+        }
+      }
+
+      // Tick sparkle timer
+      if (ch.sparkleTimer && ch.sparkleTimer > 0) {
+        ch.sparkleTimer -= dt
+        if (ch.sparkleTimer <= 0) {
+          ch.sparkleTimer = 0
+          ch.sparkleParticles = undefined
         }
       }
     }

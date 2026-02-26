@@ -197,4 +197,8 @@ export interface Character {
   displayName?: string
   /** Walk speed multiplier (1 = normal, >1 = faster for short trips) */
   walkSpeedMultiplier?: number
+  /** Sparkle effect timer (counts down from 2.0 to 0 when task completes) */
+  sparkleTimer?: number
+  /** Sparkle particle positions (pre-generated on trigger) */
+  sparkleParticles?: Array<{ x: number; y: number; delay: number }>
 }

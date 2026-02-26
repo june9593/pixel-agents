@@ -39,10 +39,11 @@ const TOOL_NAME_MAP: Record<string, string> = {
 
   // Agent management
   add_agent_by_config: 'Task',
+  check_agent_status: 'Read',
 
   // MCP tools
   check_mcp_status: 'Read',
-  toggle_mcp_by_name: 'Read',
+  toggle_mcp_by_name: 'Bash',
 
   // Info tools
   get_current_datetime: 'Read',

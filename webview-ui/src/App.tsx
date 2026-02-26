@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { OfficeState } from './office/engine/officeState.js'
 import { OfficeCanvas } from './office/components/OfficeCanvas.js'
 import { ToolOverlay } from './office/components/ToolOverlay.js'
@@ -15,6 +15,58 @@ import { ZoomControls } from './components/ZoomControls.js'
 import { BottomToolbar } from './components/BottomToolbar.js'
 import { DebugView } from './components/DebugView.js'
 import { AgentLabels } from './components/AgentLabels.js'
+
+/** Day/night tint overlay — changes color based on real time of day */
+function DayNightOverlay() {
+  const [tint, setTint] = useState({ color: 'transparent', opacity: 0 })
+
+  useEffect(() => {
+    function update() {
+      const h = new Date().getHours()
+      let color = 'transparent'
+      let opacity = 0
+      if (h >= 6 && h < 8) {
+        // Early morning — warm golden
+        color = 'rgba(255, 200, 100, 0.08)'
+        opacity = 1
+      } else if (h >= 8 && h < 17) {
+        // Daytime — clear
+        color = 'transparent'
+        opacity = 0
+      } else if (h >= 17 && h < 19) {
+        // Sunset — warm orange
+        color = 'rgba(255, 150, 50, 0.1)'
+        opacity = 1
+      } else if (h >= 19 && h < 21) {
+        // Evening — soft blue
+        color = 'rgba(30, 50, 120, 0.15)'
+        opacity = 1
+      } else {
+        // Night — deep blue
+        color = 'rgba(10, 20, 60, 0.2)'
+        opacity = 1
+      }
+      setTint({ color, opacity })
+    }
+    update()
+    const timer = setInterval(update, 60000) // update every minute
+    return () => clearInterval(timer)
+  }, [])
+
+  if (tint.opacity === 0) return null
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        background: tint.color,
+        pointerEvents: 'none',
+        zIndex: 39,
+        transition: 'background 60s ease',
+      }}
+    />
+  )
+}
 
 // Game state lives outside React — updated imperatively by message handlers
 const officeStateRef = { current: null as OfficeState | null }
@@ -225,6 +277,9 @@ function App() {
           zIndex: 40,
         }}
       />
+
+      {/* Day/night cycle overlay — warm at morning/evening, cool at night */}
+      <DayNightOverlay />
 
       <BottomToolbar
         isEditMode={editor.isEditMode}
