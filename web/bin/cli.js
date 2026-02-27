@@ -10,7 +10,7 @@
  *   npx pixel-kosmos --open             # auto-open browser
  */
 
-import { fileURLToPath } from 'url'
+import { fileURLToPath, pathToFileURL } from 'url'
 import path from 'path'
 import os from 'os'
 import fs from 'fs'
@@ -71,17 +71,16 @@ if (autoOpen) {
 }
 
 // Import and start the server
+// On Windows, import() requires file:// URLs, not bare paths like C:\...
 const serverPath = path.resolve(__dirname, '../dist/server.js')
 if (fs.existsSync(serverPath)) {
-  // Production: use compiled JS
-  await import(serverPath)
+  await import(pathToFileURL(serverPath).href)
 } else {
-  // Development: use tsx to run TypeScript directly
   const srcPath = path.resolve(__dirname, '../src/server.ts')
   if (fs.existsSync(srcPath)) {
-    await import(srcPath)
+    await import(pathToFileURL(srcPath).href)
   } else {
-    console.error('❌ Server not found. Run `npm run build` first.')
+    console.error('Server not found. Run `npm run build` first.')
     process.exit(1)
   }
 }
