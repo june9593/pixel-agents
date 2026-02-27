@@ -33,8 +33,20 @@ const __dirname = path.dirname(__filename)
 // ── Configuration ──────────────────────────────────────────────
 
 const PORT = parseInt(process.env.PORT || '3000', 10)
-const KOSMOS_APP_DIR = process.env.KOSMOS_APP_DIR ||
-  path.join(os.homedir(), 'Library', 'Application Support', 'kosmos-app')
+
+// Detect kosmos-app directory based on OS
+function getDefaultKosmosDir(): string {
+  const platform = process.platform
+  if (platform === 'win32') {
+    return path.join(os.homedir(), 'AppData', 'Roaming', 'kosmos-app')
+  } else if (platform === 'linux') {
+    return path.join(os.homedir(), '.config', 'kosmos-app')
+  }
+  // macOS
+  return path.join(os.homedir(), 'Library', 'Application Support', 'kosmos-app')
+}
+
+const KOSMOS_APP_DIR = process.env.KOSMOS_APP_DIR || getDefaultKosmosDir()
 const PROFILE_ALIAS = process.env.KOSMOS_PROFILE || ''
 
 function detectProfile(kosmosDir: string): string {
@@ -254,11 +266,14 @@ function handleWebviewMessage(msg: Record<string, unknown>, ws: WebSocket): void
       break
     }
     case 'openSessionsFolder': {
-      // Open kosmos-app chat sessions directory in Finder
+      // Open kosmos-app chat sessions directory in file explorer
       const sessionsDir = path.join(KOSMOS_APP_DIR, 'profiles', profile, 'chat_sessions')
       console.log(`[Server] Opening sessions folder: ${sessionsDir}`)
       import('child_process').then(cp => {
-        cp.exec(`open "${sessionsDir}"`)
+        const cmd = process.platform === 'win32' ? `explorer "${sessionsDir}"`
+          : process.platform === 'linux' ? `xdg-open "${sessionsDir}"`
+          : `open "${sessionsDir}"`
+        cp.exec(cmd)
       })
       break
     }

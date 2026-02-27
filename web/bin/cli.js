@@ -32,7 +32,18 @@ const profile = getArg('profile') || ''
 const autoOpen = hasFlag('open')
 
 // Detect kosmos-app directory
-const defaultKosmosDir = path.join(os.homedir(), 'Library', 'Application Support', 'kosmos-app')
+// Detect kosmos-app directory based on OS
+function getDefaultKosmosDir() {
+  const platform = process.platform
+  if (platform === 'win32') {
+    return path.join(os.homedir(), 'AppData', 'Roaming', 'kosmos-app')
+  } else if (platform === 'linux') {
+    return path.join(os.homedir(), '.config', 'kosmos-app')
+  }
+  return path.join(os.homedir(), 'Library', 'Application Support', 'kosmos-app')
+}
+
+const defaultKosmosDir = getDefaultKosmosDir()
 const kosmosDir = getArg('kosmos-dir') || defaultKosmosDir
 
 if (!fs.existsSync(kosmosDir)) {
@@ -50,7 +61,11 @@ if (profile) process.env.KOSMOS_PROFILE = profile
 if (autoOpen) {
   setTimeout(() => {
     import('child_process').then(cp => {
-      cp.exec(`open http://localhost:${port}`)
+      const url = `http://localhost:${port}`
+      const cmd = process.platform === 'win32' ? `start ${url}`
+        : process.platform === 'linux' ? `xdg-open ${url}`
+        : `open ${url}`
+      cp.exec(cmd)
     })
   }, 2000)
 }
