@@ -21,6 +21,11 @@ import os from 'os'
 import { fileURLToPath } from 'url'
 import { KosmosWatcher } from './kosmosWatcher.js'
 import { loadAllAssets, type AllAssets } from './webAssetLoader.js'
+import {
+  loadGameState, saveGameState, ensureAgentProfile, recordToolCall,
+  recordTurnEnd, performAction, getGameSummary, ACTIONS,
+  type GameState, type ActionType,
+} from './gameState.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -29,10 +34,15 @@ const __dirname = path.dirname(__filename)
 
 const PORT = parseInt(process.env.PORT || '3000', 10)
 
+// Detect kosmos-app directory based on OS
 function getDefaultKosmosDir(): string {
   const platform = process.platform
-  if (platform === 'win32') return path.join(os.homedir(), 'AppData', 'Roaming', 'kosmos-app')
-  if (platform === 'linux') return path.join(os.homedir(), '.config', 'kosmos-app')
+  if (platform === 'win32') {
+    return path.join(os.homedir(), 'AppData', 'Roaming', 'kosmos-app')
+  } else if (platform === 'linux') {
+    return path.join(os.homedir(), '.config', 'kosmos-app')
+  }
+  // macOS
   return path.join(os.homedir(), 'Library', 'Application Support', 'kosmos-app')
 }
 
@@ -60,8 +70,10 @@ function detectProfile(kosmosDir: string): string {
 // ── Load sprite assets at startup ──────────────────────────────
 
 const assetSearchPaths = [
-  path.resolve(__dirname, '../../webview-ui/public/assets'),
-  path.resolve(__dirname, '../../dist/webview/assets'),
+  path.resolve(__dirname, '../../webview-ui/public/assets'),  // dev: src/ -> webview-ui/
+  path.resolve(__dirname, '../../dist/webview/assets'),       // dev: src/ -> dist/
+  path.resolve(__dirname, '../dist/webview/assets'),           // npm: dist/ -> dist/webview/
+  path.resolve(__dirname, 'webview/assets'),                   // npm compiled: dist/ -> dist/webview/
 ]
 
 let loadedAssets: AllAssets = { characters: null, wallTiles: null, floorTiles: null, furniture: null }
@@ -80,8 +92,12 @@ const app = express()
 const server = createServer(app)
 
 // Serve webview-ui static files
-const webviewDistPath = path.resolve(__dirname, '../../dist/webview')
-const webviewDevPath = path.resolve(__dirname, '../../webview-ui')
+const webviewSearchPaths = [
+  path.resolve(__dirname, '../../dist/webview'),     // dev: src/ -> dist/webview
+  path.resolve(__dirname, '../dist/webview'),         // npm: dist/ -> dist/webview
+  path.resolve(__dirname, 'webview'),                 // npm compiled: dist/ -> webview
+]
+const webviewDistPath = webviewSearchPaths.find(p => fs.existsSync(p)) || webviewSearchPaths[0]
 
 if (fs.existsSync(webviewDistPath)) {
   console.log(`[Server] Serving webview from: ${webviewDistPath}`)
@@ -97,9 +113,14 @@ app.get('/api/agents', (_req, res) => {
   res.json(info)
 })
 
+// Game state API
+app.get('/api/game', (_req, res) => {
+  res.json(getGameSummary(gameState))
+})
+
 // Health check
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', agents: watcher.getAgents().length })
+  res.json({ status: 'ok', agents: watcher.getAgents().length, coins: gameState.coins })
 })
 
 // Fallback to index.html for SPA
@@ -154,8 +175,10 @@ function broadcast(msg: unknown): void {
 function sendDefaultLayout(ws: WebSocket): void {
   // Try to load the default layout from webview-ui/public/assets/
   const layoutPaths = [
-    path.resolve(__dirname, '../../webview-ui/public/assets/default-layout.json'),
-    path.resolve(__dirname, '../../dist/webview/assets/default-layout.json'),
+    path.resolve(__dirname, '../../webview-ui/public/assets/default-layout.json'),  // dev
+    path.resolve(__dirname, '../../dist/webview/assets/default-layout.json'),       // dev
+    path.resolve(__dirname, '../dist/webview/assets/default-layout.json'),           // npm
+    path.resolve(__dirname, 'webview/assets/default-layout.json'),                   // npm compiled
   ]
 
   console.log(`[Server] __dirname = ${__dirname}`)
@@ -226,6 +249,9 @@ function handleWebviewMessage(msg: Record<string, unknown>, ws: WebSocket): void
       ws.send(JSON.stringify(watcher.generateExistingAgentsMessage()))
       // Send layout last — this triggers agent creation from the buffer
       sendDefaultLayout(ws)
+
+      // Send game state
+      ws.send(JSON.stringify({ type: 'gameUpdate', ...getGameSummary(gameState) }))
       break
     case 'openClaude':
       // In web mode, this could open a new kosmos-app chat
@@ -240,11 +266,14 @@ function handleWebviewMessage(msg: Record<string, unknown>, ws: WebSocket): void
       break
     }
     case 'openSessionsFolder': {
-      // Open kosmos-app chat sessions directory in Finder
+      // Open kosmos-app chat sessions directory in file explorer
       const sessionsDir = path.join(KOSMOS_APP_DIR, 'profiles', profile, 'chat_sessions')
       console.log(`[Server] Opening sessions folder: ${sessionsDir}`)
       import('child_process').then(cp => {
-        cp.exec(`open "${sessionsDir}"`)
+        const cmd = process.platform === 'win32' ? `explorer "${sessionsDir}"`
+          : process.platform === 'linux' ? `xdg-open "${sessionsDir}"`
+          : `open "${sessionsDir}"`
+        cp.exec(cmd)
       })
       break
     }
@@ -263,6 +292,59 @@ function handleWebviewMessage(msg: Record<string, unknown>, ws: WebSocket): void
     case 'saveAgentSeats':
       // Persist agent seats
       break
+    case 'getLayoutForExport': {
+      // Send current layout back to webview for browser download
+      const layoutDir = path.join(os.homedir(), '.pixel-agents')
+      const layoutPath = path.join(layoutDir, 'layout.json')
+      let layout = null
+      if (fs.existsSync(layoutPath)) {
+        try { layout = JSON.parse(fs.readFileSync(layoutPath, 'utf-8')) } catch { /* ignore */ }
+      }
+      ws.send(JSON.stringify({ type: 'layoutExportData', layout }))
+      break
+    }
+    case 'importLayoutData': {
+      // Save imported layout and broadcast to all clients
+      const layout = msg.layout as Record<string, unknown>
+      try {
+        const layoutDir = path.join(os.homedir(), '.pixel-agents')
+        if (!fs.existsSync(layoutDir)) fs.mkdirSync(layoutDir, { recursive: true })
+        fs.writeFileSync(path.join(layoutDir, 'layout.json'), JSON.stringify(layout, null, 2))
+        broadcast({ type: 'layoutLoaded', layout })
+        console.log('[Server] Layout imported')
+      } catch (err) {
+        console.error(`[Server] Import layout error: ${err}`)
+      }
+      break
+    }
+    case 'gameAction': {
+      // Player spends coins on an agent interaction
+      const actionAgentId = msg.agentId as number
+      const actionType = msg.action as ActionType
+      if (!ACTIONS[actionType]) {
+        ws.send(JSON.stringify({ type: 'gameActionResult', success: false, reason: 'Unknown action' }))
+        break
+      }
+      const result = performAction(gameState, actionAgentId, actionType)
+      ws.send(JSON.stringify({
+        type: 'gameActionResult',
+        ...result,
+        action: actionType,
+        agentId: actionAgentId,
+        coins: gameState.coins,
+      }))
+      if (result.success) {
+        // Broadcast game update + animation trigger to all clients
+        broadcast({
+          type: 'gameAnimation',
+          agentId: actionAgentId,
+          action: actionType,
+          emoji: ACTIONS[actionType].emoji,
+        })
+        broadcast({ type: 'gameUpdate', ...getGameSummary(gameState) })
+      }
+      break
+    }
     default:
       break
   }
@@ -277,14 +359,83 @@ const watcher = new KosmosWatcher({
   pollInterval: 2000,
 })
 
-// Forward watcher messages to all WebSocket clients
+// ── Game State ─────────────────────────────────────────────────
+
+const gameState: GameState = loadGameState()
+
+function syncAgentProfiles(): void {
+  for (const watched of watcher.getAgents()) {
+    ensureAgentProfile(gameState, watched.agentId, watched.agent.name, watched.agent.emoji)
+  }
+  saveGameState(gameState)
+}
+
+// Forward watcher messages to all WebSocket clients + track game events
 watcher.on('message', (msg) => {
   broadcast(msg)
+
+  // Track tool calls for game economy (only real-time events, not initial replay)
+  if (msg.type === 'agentToolDone' && !msg._replay) {
+    const agentId = msg.id as number
+    const watched = watcher.getAgents().find(a => a.agentId === agentId)
+    if (watched) {
+      ensureAgentProfile(gameState, agentId, watched.agent.name, watched.agent.emoji)
+      const result = recordToolCall(gameState, agentId)
+      if (result.coinsEarned > 0) {
+        broadcast({
+          type: 'gameCoinEarned',
+          agentId,
+          coins: result.coinsEarned,
+          combo: result.comboBonus,
+          totalCoins: gameState.coins,
+        })
+      }
+      for (const ach of result.newAchievements) {
+        broadcast({
+          type: 'gameAchievement',
+          agentId,
+          achievement: { id: ach.id, name: ach.name, emoji: ach.emoji, description: ach.description },
+        })
+      }
+      // Broadcast full game state so profiles update in real-time
+      broadcast({ type: 'gameUpdate', ...getGameSummary(gameState) })
+    }
+  }
+
+  // Reset combo on turn end
+  if (msg.type === 'agentStatus' && msg.status === 'waiting' && !msg._replay) {
+    recordTurnEnd(gameState, msg.id as number)
+    broadcast({ type: 'gameUpdate', ...getGameSummary(gameState) })
+  }
+
+  // Text-only response counts as a light task (no mood penalty, +2 coins)
+  if (msg.type === 'agentTextResponse' && !msg._replay) {
+    const agentId = msg.id as number
+    const watched = watcher.getAgents().find(a => a.agentId === agentId)
+    if (watched) {
+      ensureAgentProfile(gameState, agentId, watched.agent.name, watched.agent.emoji)
+      const profile = gameState.agents[agentId]
+      if (profile) {
+        if (profile.lastActiveDate !== new Date().toISOString().slice(0, 10)) {
+          profile.todayToolCalls = 0
+          profile.lastActiveDate = new Date().toISOString().slice(0, 10)
+        }
+        profile.totalToolCalls++
+        profile.todayToolCalls++
+        // Light task: earn 2 coins, no mood penalty
+        gameState.coins += 2
+        gameState.totalCoinsEarned += 2
+        saveGameState(gameState)
+        broadcast({ type: 'gameUpdate', ...getGameSummary(gameState) })
+      }
+    }
+  }
 })
 
 // ── Start Server ───────────────────────────────────────────────
 
 watcher.start()
+syncAgentProfiles()
 
 server.listen(PORT, () => {
   console.log('')

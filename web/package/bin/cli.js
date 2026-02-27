@@ -31,11 +31,15 @@ const port = getArg('port') || '3210'
 const profile = getArg('profile') || ''
 const autoOpen = hasFlag('open')
 
+// Detect kosmos-app directory
 // Detect kosmos-app directory based on OS
 function getDefaultKosmosDir() {
   const platform = process.platform
-  if (platform === 'win32') return path.join(os.homedir(), 'AppData', 'Roaming', 'kosmos-app')
-  if (platform === 'linux') return path.join(os.homedir(), '.config', 'kosmos-app')
+  if (platform === 'win32') {
+    return path.join(os.homedir(), 'AppData', 'Roaming', 'kosmos-app')
+  } else if (platform === 'linux') {
+    return path.join(os.homedir(), '.config', 'kosmos-app')
+  }
   return path.join(os.homedir(), 'Library', 'Application Support', 'kosmos-app')
 }
 
@@ -67,6 +71,7 @@ if (autoOpen) {
 }
 
 // Import and start the server
+// On Windows, import() requires file:// URLs, not bare paths like C:\...
 const serverPath = path.resolve(__dirname, '../dist/server.js')
 if (fs.existsSync(serverPath)) {
   await import(pathToFileURL(serverPath).href)
