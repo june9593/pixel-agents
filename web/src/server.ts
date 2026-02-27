@@ -28,8 +28,15 @@ const __dirname = path.dirname(__filename)
 // ── Configuration ──────────────────────────────────────────────
 
 const PORT = parseInt(process.env.PORT || '3000', 10)
-const KOSMOS_APP_DIR = process.env.KOSMOS_APP_DIR ||
-  path.join(os.homedir(), 'Library', 'Application Support', 'kosmos-app')
+
+function getDefaultKosmosDir(): string {
+  const platform = process.platform
+  if (platform === 'win32') return path.join(os.homedir(), 'AppData', 'Roaming', 'kosmos-app')
+  if (platform === 'linux') return path.join(os.homedir(), '.config', 'kosmos-app')
+  return path.join(os.homedir(), 'Library', 'Application Support', 'kosmos-app')
+}
+
+const KOSMOS_APP_DIR = process.env.KOSMOS_APP_DIR || getDefaultKosmosDir()
 const PROFILE_ALIAS = process.env.KOSMOS_PROFILE || ''
 
 function detectProfile(kosmosDir: string): string {

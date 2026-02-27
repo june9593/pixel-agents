@@ -10,7 +10,7 @@
  *   npx pixel-kosmos --open             # auto-open browser
  */
 
-import { fileURLToPath } from 'url'
+import { fileURLToPath, pathToFileURL } from 'url'
 import path from 'path'
 import os from 'os'
 import fs from 'fs'
@@ -31,8 +31,15 @@ const port = getArg('port') || '3210'
 const profile = getArg('profile') || ''
 const autoOpen = hasFlag('open')
 
-// Detect kosmos-app directory
-const defaultKosmosDir = path.join(os.homedir(), 'Library', 'Application Support', 'kosmos-app')
+// Detect kosmos-app directory based on OS
+function getDefaultKosmosDir() {
+  const platform = process.platform
+  if (platform === 'win32') return path.join(os.homedir(), 'AppData', 'Roaming', 'kosmos-app')
+  if (platform === 'linux') return path.join(os.homedir(), '.config', 'kosmos-app')
+  return path.join(os.homedir(), 'Library', 'Application Support', 'kosmos-app')
+}
+
+const defaultKosmosDir = getDefaultKosmosDir()
 const kosmosDir = getArg('kosmos-dir') || defaultKosmosDir
 
 if (!fs.existsSync(kosmosDir)) {
@@ -50,7 +57,11 @@ if (profile) process.env.KOSMOS_PROFILE = profile
 if (autoOpen) {
   setTimeout(() => {
     import('child_process').then(cp => {
-      cp.exec(`open http://localhost:${port}`)
+      const url = `http://localhost:${port}`
+      const cmd = process.platform === 'win32' ? `start ${url}`
+        : process.platform === 'linux' ? `xdg-open ${url}`
+        : `open ${url}`
+      cp.exec(cmd)
     })
   }, 2000)
 }
@@ -58,15 +69,13 @@ if (autoOpen) {
 // Import and start the server
 const serverPath = path.resolve(__dirname, '../dist/server.js')
 if (fs.existsSync(serverPath)) {
-  // Production: use compiled JS
-  await import(serverPath)
+  await import(pathToFileURL(serverPath).href)
 } else {
-  // Development: use tsx to run TypeScript directly
   const srcPath = path.resolve(__dirname, '../src/server.ts')
   if (fs.existsSync(srcPath)) {
-    await import(srcPath)
+    await import(pathToFileURL(srcPath).href)
   } else {
-    console.error('❌ Server not found. Run `npm run build` first.')
+    console.error('Server not found. Run `npm run build` first.')
     process.exit(1)
   }
 }
