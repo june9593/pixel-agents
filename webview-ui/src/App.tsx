@@ -1,10 +1,10 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { OfficeState } from './office/engine/officeState.js'
 import { OfficeCanvas } from './office/components/OfficeCanvas.js'
 import { ToolOverlay } from './office/components/ToolOverlay.js'
 import { EditorToolbar } from './office/editor/EditorToolbar.js'
 import { EditorState } from './office/editor/editorState.js'
-import { EditTool } from './office/types.js'
+import { EditTool, CharacterState } from './office/types.js'
 import { isRotatable } from './office/layout/furnitureCatalog.js'
 import { vscode } from './vscodeApi.js'
 import { useExtensionMessages } from './hooks/useExtensionMessages.js'
@@ -14,6 +14,60 @@ import { useEditorKeyboard } from './hooks/useEditorKeyboard.js'
 import { ZoomControls } from './components/ZoomControls.js'
 import { BottomToolbar } from './components/BottomToolbar.js'
 import { DebugView } from './components/DebugView.js'
+import { AgentLabels } from './components/AgentLabels.js'
+import { GameHud, type AgentProfileData } from './components/GameHud.js'
+
+/** Day/night tint overlay — changes color based on real time of day */
+function DayNightOverlay() {
+  const [tint, setTint] = useState({ color: 'transparent', opacity: 0 })
+
+  useEffect(() => {
+    function update() {
+      const h = new Date().getHours()
+      let color = 'transparent'
+      let opacity = 0
+      if (h >= 6 && h < 8) {
+        // Early morning — warm golden
+        color = 'rgba(255, 200, 100, 0.08)'
+        opacity = 1
+      } else if (h >= 8 && h < 17) {
+        // Daytime — clear
+        color = 'transparent'
+        opacity = 0
+      } else if (h >= 17 && h < 19) {
+        // Sunset — warm orange
+        color = 'rgba(255, 150, 50, 0.1)'
+        opacity = 1
+      } else if (h >= 19 && h < 21) {
+        // Evening — soft blue
+        color = 'rgba(30, 50, 120, 0.15)'
+        opacity = 1
+      } else {
+        // Night — deep blue
+        color = 'rgba(10, 20, 60, 0.2)'
+        opacity = 1
+      }
+      setTint({ color, opacity })
+    }
+    update()
+    const timer = setInterval(update, 60000) // update every minute
+    return () => clearInterval(timer)
+  }, [])
+
+  if (tint.opacity === 0) return null
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        background: tint.color,
+        pointerEvents: 'none',
+        zIndex: 39,
+        transition: 'background 60s ease',
+      }}
+    />
+  )
+}
 
 // Game state lives outside React — updated imperatively by message handlers
 const officeStateRef = { current: null as OfficeState | null }
@@ -116,16 +170,143 @@ function EditActionBar({ editor, editorState: es }: { editor: ReturnType<typeof 
   )
 }
 
+/** Floating emoji reactions above characters (React overlay for proper emoji rendering) */
+function EmojiReactions({ officeState, containerRef, zoom, panRef }: {
+  officeState: OfficeState
+  containerRef: React.RefObject<HTMLDivElement | null>
+  zoom: number
+  panRef: React.RefObject<{ x: number; y: number }>
+}) {
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    let rafId = 0
+    const tick = () => { setTick(n => n + 1); rafId = requestAnimationFrame(tick) }
+    rafId = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafId)
+  }, [])
+
+  const el = containerRef.current
+  if (!el) return null
+  const rect = el.getBoundingClientRect()
+  const dpr = window.devicePixelRatio || 1
+  const canvasW = Math.round(rect.width * dpr)
+  const canvasH = Math.round(rect.height * dpr)
+  const layout = officeState.getLayout()
+  const mapW = layout.cols * 16 * zoom
+  const mapH = layout.rows * 16 * zoom
+  const deviceOffsetX = Math.floor((canvasW - mapW) / 2) + Math.round(panRef.current.x)
+  const deviceOffsetY = Math.floor((canvasH - mapH) / 2) + Math.round(panRef.current.y)
+
+  return (
+    <>
+      {Array.from(officeState.characters.values()).map(ch => {
+        if (!ch.emojiReaction) return null
+        const { emoji, timer } = ch.emojiReaction
+        const sittingOffset = ch.state === CharacterState.TYPE ? 6 : 0
+        const screenX = (deviceOffsetX + ch.x * zoom) / dpr
+        const screenY = (deviceOffsetY + (ch.y + sittingOffset - 28) * zoom) / dpr
+
+        // Float upward as timer decreases, fade out in last second
+        const progress = 1 - timer / 3.0
+        const floatY = -progress * 20
+        const opacity = timer < 1.0 ? timer : 1.0
+
+        return (
+          <div
+            key={`emoji-${ch.id}`}
+            style={{
+              position: 'absolute',
+              left: screenX,
+              top: screenY + floatY,
+              transform: 'translateX(-50%)',
+              fontSize: `${Math.max(20, zoom * 8)}px`,
+              opacity,
+              pointerEvents: 'none',
+              zIndex: 150,
+              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))',
+              transition: 'opacity 0.3s',
+            }}
+          >
+            {emoji}
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
 function App() {
   const editor = useEditorActions(getOfficeState, editorState)
 
   const isEditDirty = useCallback(() => editor.isEditMode && editor.isDirty, [editor.isEditMode, editor.isDirty])
 
-  const { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
+  const { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, agentNames } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
 
   const [isDebugMode, setIsDebugMode] = useState(false)
+  const [showNameLabels, setShowNameLabels] = useState(true)
+  const [gameCoins, setGameCoins] = useState(0)
+  const [agentProfiles, setAgentProfiles] = useState<Record<number, AgentProfileData>>({})
 
   const handleToggleDebugMode = useCallback(() => setIsDebugMode((prev) => !prev), [])
+  const getSelectedAgentId = useCallback(() => getOfficeState().selectedAgentId, [])
+  const isAgentIdle = useCallback((id: number) => {
+    const ch = getOfficeState().characters.get(id)
+    return ch ? !ch.isActive : true
+  }, [])
+  const handleToggleNameLabels = useCallback(() => setShowNameLabels((prev) => !prev), [])
+
+  // Listen for game state updates from server
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      const msg = e.data
+      if (msg.type === 'gameUpdate') {
+        setGameCoins(msg.coins ?? 0)
+        setAgentProfiles(msg.agents ?? {})
+      } else if (msg.type === 'gameCoinEarned') {
+        setGameCoins(msg.totalCoins ?? 0)
+      } else if (msg.type === 'gameAnimation') {
+        // Trigger character animation for game actions
+        const os = getOfficeState()
+        const agentId = msg.agentId as number
+        const actionEmoji = msg.emoji as string
+        const ch = os.characters.get(agentId)
+
+        // Show floating emoji reaction on the character
+        if (ch && actionEmoji) {
+          ch.emojiReaction = { emoji: actionEmoji, timer: 3.0 }
+        }
+
+        if (msg.action === 'tea' || msg.action === 'pizza') {
+          // Send to kitchen (only if idle)
+          if (ch && !ch.isActive) {
+            os.sendCharacterToZone(ch, 'kitchen')
+          }
+        } else if (msg.action === 'party') {
+          // Send ALL characters to meeting room for party
+          for (const c of os.characters.values()) {
+            if (c.state !== CharacterState.WALK) {
+              os.sendCharacterToZone(c, 'meeting')
+              c.emojiReaction = { emoji: '🎉', timer: 4.0 }
+            }
+          }
+        }
+        // Trigger sparkle effect for salary/promote
+        if (msg.action === 'salary' || msg.action === 'promote') {
+          const ch = os.characters.get(agentId)
+          if (ch) {
+            ch.sparkleTimer = 3.0
+            ch.sparkleParticles = Array.from({ length: 10 }, () => ({
+              x: (Math.random() - 0.5) * 24,
+              y: -Math.random() * 20 - 8,
+              delay: Math.random() * 0.8,
+            }))
+          }
+        }
+      }
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [])
 
   const handleSelectAgent = useCallback((id: number) => {
     vscode.postMessage({ type: 'focusAgent', id })
@@ -191,6 +372,11 @@ function App() {
           50% { opacity: 0.3; }
         }
         .pixel-agents-pulse { animation: pixel-agents-pulse ${PULSE_ANIMATION_DURATION_SEC}s ease-in-out infinite; }
+        @keyframes pixel-agents-notif {
+          0% { opacity: 1; transform: translateY(0); }
+          70% { opacity: 1; transform: translateY(-10px); }
+          100% { opacity: 0; transform: translateY(-20px); }
+        }
       `}</style>
 
       <OfficeCanvas
@@ -223,12 +409,17 @@ function App() {
         }}
       />
 
+      {/* Day/night cycle overlay — warm at morning/evening, cool at night */}
+      <DayNightOverlay />
+
       <BottomToolbar
         isEditMode={editor.isEditMode}
         onOpenClaude={editor.handleOpenClaude}
         onToggleEditMode={editor.handleToggleEditMode}
         isDebugMode={isDebugMode}
         onToggleDebugMode={handleToggleDebugMode}
+        showNameLabels={showNameLabels}
+        onToggleNameLabels={handleToggleNameLabels}
       />
 
       {editor.isEditMode && editor.isDirty && (
@@ -295,6 +486,27 @@ function App() {
         onCloseAgent={handleCloseAgent}
       />
 
+      {showNameLabels && (
+        <AgentLabels
+          officeState={officeState}
+          agents={agents}
+          agentStatuses={agentStatuses}
+          containerRef={containerRef}
+          zoom={editor.zoom}
+          panRef={editor.panRef}
+          subagentCharacters={subagentCharacters}
+          agentNames={agentNames}
+        />
+      )}
+
+      {/* Floating emoji reactions */}
+      <EmojiReactions
+        officeState={officeState}
+        containerRef={containerRef}
+        zoom={editor.zoom}
+        panRef={editor.panRef}
+      />
+
       {isDebugMode && (
         <DebugView
           agents={agents}
@@ -305,6 +517,13 @@ function App() {
           onSelectAgent={handleSelectAgent}
         />
       )}
+
+      <GameHud
+        coins={gameCoins}
+        getSelectedAgentId={getSelectedAgentId}
+        isAgentIdle={isAgentIdle}
+        agentProfiles={agentProfiles}
+      />
     </div>
   )
 }

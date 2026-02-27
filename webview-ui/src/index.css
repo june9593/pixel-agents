@@ -46,6 +46,11 @@
   --pixel-status-permission: var(--vscode-charts-yellow, #cca700);
   --pixel-status-active: var(--vscode-charts-blue, #3794ff);
 
+  /* VS Code variable fallbacks for standalone web mode */
+  --vscode-foreground: #cccccc;
+  --vscode-charts-yellow: #cca700;
+  --vscode-charts-blue: #3794ff;
+
   /* ToolOverlay z-index layers */
   --pixel-overlay-z: 100;
   --pixel-overlay-selected-z: 110;

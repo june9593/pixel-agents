@@ -160,9 +160,20 @@ export class OfficeState {
   }
 
   private findFreeSeat(): string | null {
+    // Prefer seats in the main work area (rows 14-19, cols 1-9) — these have desks
+    const workAreaSeats: string[] = []
+    const otherSeats: string[] = []
     for (const [uid, seat] of this.seats) {
-      if (!seat.assigned) return uid
+      if (!seat.assigned) {
+        if (seat.seatRow >= 14 && seat.seatRow <= 19 && seat.seatCol >= 1 && seat.seatCol <= 9) {
+          workAreaSeats.push(uid)
+        } else {
+          otherSeats.push(uid)
+        }
+      }
     }
+    if (workAreaSeats.length > 0) return workAreaSeats[0]
+    if (otherSeats.length > 0) return otherSeats[0]
     return null
   }
 
@@ -496,11 +507,15 @@ export class OfficeState {
     if (ch) {
       ch.isActive = active
       if (!active) {
-        // Sentinel -1: signals turn just ended, skip next seat rest timer.
-        // Prevents the WALK handler from setting a 2-4 min rest on arrival.
+        // Turn ended — stay at desk for a bit, then wander naturally
+        // (the TYPE→IDLE transition in updateCharacter handles the rest)
         ch.seatTimer = -1
         ch.path = []
         ch.moveProgress = 0
+        ch.zoneVisitActive = false
+        ch.idleElapsed = 0
+      } else {
+        ch.idleElapsed = 0
       }
       this.rebuildFurnitureInstances()
     }
@@ -569,8 +584,112 @@ export class OfficeState {
   setAgentTool(id: number, tool: string | null): void {
     const ch = this.characters.get(id)
     if (ch) {
+      const prevTool = ch.currentTool
       ch.currentTool = tool
+
+      // When a new tool starts, optionally send the character somewhere interesting
+      if (tool && tool !== prevTool && ch.isActive) {
+        if (tool === 'Read' || tool === 'Grep' || tool === 'Glob') {
+          this.sendCharacterToZone(ch, 'bookshelf')
+        } else if (tool === 'WebSearch' || tool === 'WebFetch') {
+          this.sendCharacterToZone(ch, 'bookshelf')
+        } else if (tool === 'Bash') {
+          // Bash/command execution — stay at desk (terminal work)
+          this.sendCharacterToZone(ch, 'desk')
+        } else if (tool === 'Task') {
+          this.sendCharacterToZone(ch, 'meeting')
+        } else {
+          // Write and other tools → go back to desk
+          this.sendCharacterToZone(ch, 'desk')
+        }
+      }
+
+      // When tool clears, let the character finish their current walk
+      // then return to desk (don't interrupt mid-walk)
+      if (!tool && prevTool && ch.isActive) {
+        if (ch.state === CharacterState.WALK && ch.zoneVisitActive) {
+          // Character is walking to a zone — let them arrive, then they'll return
+          // zoneVisitActive will trigger return-to-desk when walk completes
+        } else {
+          this.sendCharacterToZone(ch, 'desk')
+        }
+      }
     }
+  }
+
+  /** Navigate a character to a themed zone in the office */
+  sendCharacterToZone(ch: Character, zone: 'desk' | 'bookshelf' | 'server' | 'meeting' | 'lounge' | 'kitchen'): void {
+    let target: { col: number; row: number } | null = null
+
+    switch (zone) {
+      case 'desk': {
+        // Go back to assigned seat
+        if (ch.seatId) {
+          const seat = this.seats.get(ch.seatId)
+          if (seat) target = { col: seat.seatCol, row: seat.seatRow }
+        }
+        break
+      }
+      case 'bookshelf': {
+        const tiles = [
+          { col: 1, row: 12 }, { col: 2, row: 12 }, { col: 3, row: 12 },
+          { col: 5, row: 12 }, { col: 7, row: 12 }, { col: 8, row: 12 }, { col: 9, row: 12 },
+        ]
+        target = this.pickWalkableFromZone(tiles)
+        break
+      }
+      case 'server': {
+        const tiles = [
+          { col: 3, row: 19 }, { col: 2, row: 19 }, { col: 4, row: 19 },
+        ]
+        target = this.pickWalkableFromZone(tiles)
+        break
+      }
+      case 'meeting': {
+        const tiles = [
+          { col: 5, row: 4 }, { col: 5, row: 5 }, { col: 6, row: 5 },
+          { col: 6, row: 6 }, { col: 5, row: 6 },
+        ]
+        target = this.pickWalkableFromZone(tiles)
+        break
+      }
+      case 'lounge': {
+        const tiles = [
+          { col: 14, row: 18 }, { col: 15, row: 18 }, { col: 16, row: 18 },
+          { col: 17, row: 18 }, { col: 18, row: 18 },
+          { col: 15, row: 19 }, { col: 16, row: 19 },
+        ]
+        target = this.pickWalkableFromZone(tiles)
+        break
+      }
+      case 'kitchen': {
+        const tiles = [
+          { col: 12, row: 12 }, { col: 13, row: 12 }, { col: 14, row: 12 },
+          { col: 15, row: 12 }, { col: 16, row: 12 },
+        ]
+        target = this.pickWalkableFromZone(tiles)
+        break
+      }
+    }
+
+    if (target) {
+      const path = findPath(ch.tileCol, ch.tileRow, target.col, target.row, this.tileMap, this.blockedTiles)
+      if (path.length > 0) {
+        ch.path = path
+        ch.moveProgress = 0
+        ch.state = CharacterState.WALK
+        ch.frame = 0
+        ch.frameTimer = 0
+        ch.zoneVisitActive = zone !== 'desk' // mark as zone visit so we don't get re-pathed
+      }
+    }
+  }
+
+  /** Pick a random walkable tile from a zone */
+  private pickWalkableFromZone(tiles: Array<{ col: number; row: number }>): { col: number; row: number } | null {
+    const valid = tiles.filter(t => this.walkableTiles.some(w => w.col === t.col && w.row === t.row))
+    if (valid.length > 0) return valid[Math.floor(Math.random() * valid.length)]
+    return null
   }
 
   showPermissionBubble(id: number): void {
@@ -594,6 +713,13 @@ export class OfficeState {
     if (ch) {
       ch.bubbleType = 'waiting'
       ch.bubbleTimer = WAITING_BUBBLE_DURATION_SEC
+      // Trigger sparkle celebration effect
+      ch.sparkleTimer = 2.0
+      ch.sparkleParticles = Array.from({ length: 6 }, () => ({
+        x: (Math.random() - 0.5) * 20,
+        y: -Math.random() * 16 - 8,
+        delay: Math.random() * 0.5,
+      }))
     }
   }
 
@@ -643,10 +769,80 @@ export class OfficeState {
           ch.bubbleTimer = 0
         }
       }
+
+      // Tick sparkle timer
+      if (ch.sparkleTimer && ch.sparkleTimer > 0) {
+        ch.sparkleTimer -= dt
+        if (ch.sparkleTimer <= 0) {
+          ch.sparkleTimer = 0
+          ch.sparkleParticles = undefined
+        }
+      }
+      // Tick emoji reaction timer
+      if (ch.emojiReaction) {
+        ch.emojiReaction.timer -= dt
+        if (ch.emojiReaction.timer <= 0) {
+          ch.emojiReaction = undefined
+        }
+      }
     }
     // Remove characters that finished despawn
     for (const id of toDelete) {
       this.characters.delete(id)
+    }
+
+    // Idle chat system: when two idle characters are near each other,
+    // make them face each other (looks like they're chatting)
+    this.updateIdleChats()
+  }
+
+  /** Track current chat pairs to avoid flickering */
+  private chatPairs: Set<string> = new Set()
+  private chatPairTimer = 0
+
+  private updateIdleChats(): void {
+    this.chatPairTimer += 0.016 // ~60fps dt estimate
+    if (this.chatPairTimer < 2.0) return // check every 2 seconds
+    this.chatPairTimer = 0
+
+    const idleChars: Character[] = []
+    for (const ch of this.characters.values()) {
+      if (!ch.isActive && ch.state === CharacterState.IDLE && !ch.matrixEffect) {
+        idleChars.push(ch)
+      }
+    }
+
+    // Clear old chat pairs
+    this.chatPairs.clear()
+
+    // Find pairs of idle characters within 3 tiles of each other
+    for (let i = 0; i < idleChars.length; i++) {
+      for (let j = i + 1; j < idleChars.length; j++) {
+        const a = idleChars[i]
+        const b = idleChars[j]
+        const dist = Math.abs(a.tileCol - b.tileCol) + Math.abs(a.tileRow - b.tileRow)
+        if (dist <= 3 && dist > 0) {
+          const key = `${Math.min(a.id, b.id)}:${Math.max(a.id, b.id)}`
+          if (!this.chatPairs.has(key)) {
+            this.chatPairs.add(key)
+            // Face each other
+            if (a.tileCol < b.tileCol) {
+              a.dir = Direction.RIGHT
+              b.dir = Direction.LEFT
+            } else if (a.tileCol > b.tileCol) {
+              a.dir = Direction.LEFT
+              b.dir = Direction.RIGHT
+            } else if (a.tileRow < b.tileRow) {
+              a.dir = Direction.DOWN
+              b.dir = Direction.UP
+            } else {
+              a.dir = Direction.UP
+              b.dir = Direction.DOWN
+            }
+          }
+          break // each character can only chat with one other
+        }
+      }
     }
   }
 
