@@ -58,8 +58,10 @@ function detectProfile(kosmosDir: string): string {
 // ── Load sprite assets at startup ──────────────────────────────
 
 const assetSearchPaths = [
-  path.resolve(__dirname, '../../webview-ui/public/assets'),
-  path.resolve(__dirname, '../../dist/webview/assets'),
+  path.resolve(__dirname, '../../webview-ui/public/assets'),  // dev: src/ -> webview-ui/
+  path.resolve(__dirname, '../../dist/webview/assets'),       // dev: src/ -> dist/
+  path.resolve(__dirname, '../dist/webview/assets'),           // npm: dist/ -> dist/webview/
+  path.resolve(__dirname, 'webview/assets'),                   // npm compiled: dist/ -> dist/webview/
 ]
 
 let loadedAssets: AllAssets = { characters: null, wallTiles: null, floorTiles: null, furniture: null }
@@ -78,8 +80,12 @@ const app = express()
 const server = createServer(app)
 
 // Serve webview-ui static files
-const webviewDistPath = path.resolve(__dirname, '../../dist/webview')
-const webviewDevPath = path.resolve(__dirname, '../../webview-ui')
+const webviewSearchPaths = [
+  path.resolve(__dirname, '../../dist/webview'),     // dev: src/ -> dist/webview
+  path.resolve(__dirname, '../dist/webview'),         // npm: dist/ -> dist/webview
+  path.resolve(__dirname, 'webview'),                 // npm compiled: dist/ -> webview
+]
+const webviewDistPath = webviewSearchPaths.find(p => fs.existsSync(p)) || webviewSearchPaths[0]
 
 if (fs.existsSync(webviewDistPath)) {
   console.log(`[Server] Serving webview from: ${webviewDistPath}`)
@@ -157,8 +163,10 @@ function broadcast(msg: unknown): void {
 function sendDefaultLayout(ws: WebSocket): void {
   // Try to load the default layout from webview-ui/public/assets/
   const layoutPaths = [
-    path.resolve(__dirname, '../../webview-ui/public/assets/default-layout.json'),
-    path.resolve(__dirname, '../../dist/webview/assets/default-layout.json'),
+    path.resolve(__dirname, '../../webview-ui/public/assets/default-layout.json'),  // dev
+    path.resolve(__dirname, '../../dist/webview/assets/default-layout.json'),       // dev
+    path.resolve(__dirname, '../dist/webview/assets/default-layout.json'),           // npm
+    path.resolve(__dirname, 'webview/assets/default-layout.json'),                   // npm compiled
   ]
 
   console.log(`[Server] __dirname = ${__dirname}`)
