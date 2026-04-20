@@ -37,8 +37,10 @@ Usage:
 
 Options:
   --port <n>             HTTP port (default: 3210)
+  --watch <mode>         Which agent sources to watch: claude | openclaw | all
+                         (default: auto — claude if kosmos-app present, plus openclaw if --openclaw-url given)
   --profile <name>       kosmos-app profile name (default: auto-detect)
-  --kosmos-dir <path>    Override kosmos-app data directory
+  --kosmos-dir <path>    Override kosmos-app data directory (use "" to disable)
   --openclaw-url <ws>    OpenClaw Gateway WebSocket URL (e.g. ws://host:18789)
   --openclaw-token <t>   OpenClaw Gateway auth token (or env OPENCLAW_TOKEN)
   --open                 Open browser automatically after startup
@@ -118,6 +120,29 @@ if (openclawUrl) {
   process.env.OPENCLAW_URL = openclawUrl
   process.env.OPENCLAW_TOKEN = openclawToken
 }
+
+// Resolve --watch mode (default: auto-derive from what's available)
+const explicitWatch = (getArg('watch') || '').toLowerCase()
+let watchMode = explicitWatch
+if (!watchMode) {
+  if (kosmosDisabled && openclawUrl) watchMode = 'openclaw'
+  else if (kosmosDisabled) watchMode = 'openclaw'  // will fail later if no openclawUrl
+  else if (openclawUrl) watchMode = 'all'
+  else watchMode = 'claude'
+}
+if (!['claude', 'openclaw', 'all'].includes(watchMode)) {
+  console.error(`❌ --watch must be one of: claude | openclaw | all (got: ${watchMode})`)
+  process.exit(1)
+}
+if ((watchMode === 'openclaw' || watchMode === 'all') && !openclawUrl) {
+  console.error(`❌ --watch ${watchMode} requires --openclaw-url (or OPENCLAW_URL env)`)
+  process.exit(1)
+}
+if (watchMode === 'openclaw') {
+  // openclaw-only: explicitly disable kosmos even if dir exists.
+  process.env.KOSMOS_DISABLED = '1'
+}
+process.env.WATCH_MODE = watchMode
 
 // Auto-open browser after a short delay
 if (autoOpen) {
