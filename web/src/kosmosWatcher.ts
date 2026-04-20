@@ -23,6 +23,7 @@ import {
   createTranslationState,
   translateNewMessages,
 } from './logTranslator.js'
+import type { AgentWatcher, AgentInfo, AgentSource } from './watchers/types.js'
 
 export interface WatchedAgent {
   agentId: number // pixel-agents numeric ID
@@ -39,7 +40,9 @@ export interface KosmosWatcherOptions {
   pollInterval?: number // ms, default 2000
 }
 
-export class KosmosWatcher extends EventEmitter {
+export class KosmosWatcher extends EventEmitter implements AgentWatcher {
+  readonly source: AgentSource = 'kosmos'
+
   private options: KosmosWatcherOptions
   private profileDir: string
   private chatSessionsDir: string
@@ -125,6 +128,11 @@ export class KosmosWatcher extends EventEmitter {
    */
   getAgents(): WatchedAgent[] {
     return Array.from(this.watchedAgents.values())
+  }
+
+  /** Number of agents currently tracked (AgentWatcher contract). */
+  agentCount(): number {
+    return this.watchedAgents.size
   }
 
   /**
@@ -350,14 +358,14 @@ export class KosmosWatcher extends EventEmitter {
   /**
    * Get agent info for display (name + emoji)
    */
-  getAgentInfo(): Array<{ id: number; name: string; emoji: string; chatId: string; sessionTitle: string }> {
-    const info: Array<{ id: number; name: string; emoji: string; chatId: string; sessionTitle: string }> = []
+  getAgentInfo(): AgentInfo[] {
+    const info: AgentInfo[] = []
     for (const watched of this.watchedAgents.values()) {
       info.push({
         id: watched.agentId,
         name: watched.agent.name,
         emoji: watched.agent.emoji,
-        chatId: watched.agent.chatId,
+        externalId: watched.agent.chatId,
         sessionTitle: watched.session?.title || 'No active session',
       })
     }
