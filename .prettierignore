@@ -1,11 +1,10 @@
-dist/
-out/
 node_modules/
+web/node_modules/
+web/dist/
 webview-ui/node_modules/
 webview-ui/dist/
-*.vsix
+dist/
 *.png
 *.json
 webview-ui/public/
 scripts/*.html
-

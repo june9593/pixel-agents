@@ -1,121 +1,320 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react'
+import { OfficeState } from './office/engine/officeState.js'
+import { OfficeCanvas } from './office/components/OfficeCanvas.js'
+import { ToolOverlay } from './office/components/ToolOverlay.js'
+import { EditorToolbar } from './office/editor/EditorToolbar.js'
+import { EditorState } from './office/editor/editorState.js'
+import { EditTool, CharacterState } from './office/types.js'
+import { isRotatable } from './office/layout/furnitureCatalog.js'
+import { vscode } from './vscodeApi.js'
+import { useExtensionMessages } from './hooks/useExtensionMessages.js'
+import { PULSE_ANIMATION_DURATION_SEC } from './constants.js'
+import { useEditorActions } from './hooks/useEditorActions.js'
+import { useEditorKeyboard } from './hooks/useEditorKeyboard.js'
+import { ZoomControls } from './components/ZoomControls.js'
+import { BottomToolbar } from './components/BottomToolbar.js'
+import { DebugView } from './components/DebugView.js'
+import { AgentLabels } from './components/AgentLabels.js'
+import { GameHud, type AgentProfileData } from './components/GameHud.js'
 
-import { toMajorMinor } from './changelogData.js';
-import { BottomToolbar } from './components/BottomToolbar.js';
-import { ChangelogModal } from './components/ChangelogModal.js';
-import { DebugView } from './components/DebugView.js';
-import { EditActionBar } from './components/EditActionBar.js';
-import { MigrationNotice } from './components/MigrationNotice.js';
-import { SettingsModal } from './components/SettingsModal.js';
-import { Tooltip } from './components/Tooltip.js';
-import { Modal } from './components/ui/Modal.js';
-import { VersionIndicator } from './components/VersionIndicator.js';
-import { ZoomControls } from './components/ZoomControls.js';
-import { useEditorActions } from './hooks/useEditorActions.js';
-import { useEditorKeyboard } from './hooks/useEditorKeyboard.js';
-import { useExtensionMessages } from './hooks/useExtensionMessages.js';
-import { OfficeCanvas } from './office/components/OfficeCanvas.js';
-import { ToolOverlay } from './office/components/ToolOverlay.js';
-import { EditorState } from './office/editor/editorState.js';
-import { EditorToolbar } from './office/editor/EditorToolbar.js';
-import { OfficeState } from './office/engine/officeState.js';
-import { isRotatable } from './office/layout/furnitureCatalog.js';
-import { EditTool } from './office/types.js';
-import { isBrowserRuntime } from './runtime.js';
-import { vscode } from './vscodeApi.js';
+/** Day/night tint overlay — changes color based on real time of day */
+function DayNightOverlay() {
+  const [tint, setTint] = useState({ color: 'transparent', opacity: 0 })
+
+  useEffect(() => {
+    function update() {
+      const h = new Date().getHours()
+      let color = 'transparent'
+      let opacity = 0
+      if (h >= 6 && h < 8) {
+        // Early morning — warm golden
+        color = 'rgba(255, 200, 100, 0.08)'
+        opacity = 1
+      } else if (h >= 8 && h < 17) {
+        // Daytime — clear
+        color = 'transparent'
+        opacity = 0
+      } else if (h >= 17 && h < 19) {
+        // Sunset — warm orange
+        color = 'rgba(255, 150, 50, 0.1)'
+        opacity = 1
+      } else if (h >= 19 && h < 21) {
+        // Evening — soft blue
+        color = 'rgba(30, 50, 120, 0.15)'
+        opacity = 1
+      } else {
+        // Night — deep blue
+        color = 'rgba(10, 20, 60, 0.2)'
+        opacity = 1
+      }
+      setTint({ color, opacity })
+    }
+    update()
+    const timer = setInterval(update, 60000) // update every minute
+    return () => clearInterval(timer)
+  }, [])
+
+  if (tint.opacity === 0) return null
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        background: tint.color,
+        pointerEvents: 'none',
+        zIndex: 39,
+        transition: 'background 60s ease',
+      }}
+    />
+  )
+}
 
 // Game state lives outside React — updated imperatively by message handlers
-const officeStateRef = { current: null as OfficeState | null };
-const editorState = new EditorState();
+const officeStateRef = { current: null as OfficeState | null }
+const editorState = new EditorState()
 
 function getOfficeState(): OfficeState {
   if (!officeStateRef.current) {
-    officeStateRef.current = new OfficeState();
+    officeStateRef.current = new OfficeState()
   }
-  return officeStateRef.current;
+  return officeStateRef.current
+}
+
+const actionBarBtnStyle: React.CSSProperties = {
+  padding: '4px 10px',
+  fontSize: '22px',
+  background: 'var(--pixel-btn-bg)',
+  color: 'var(--pixel-text-dim)',
+  border: '2px solid transparent',
+  borderRadius: 0,
+  cursor: 'pointer',
+}
+
+const actionBarBtnDisabled: React.CSSProperties = {
+  ...actionBarBtnStyle,
+  opacity: 'var(--pixel-btn-disabled-opacity)',
+  cursor: 'default',
+}
+
+function EditActionBar({ editor, editorState: es }: { editor: ReturnType<typeof useEditorActions>; editorState: EditorState }) {
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
+
+  const undoDisabled = es.undoStack.length === 0
+  const redoDisabled = es.redoStack.length === 0
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: 8,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 'var(--pixel-controls-z)',
+        display: 'flex',
+        gap: 4,
+        alignItems: 'center',
+        background: 'var(--pixel-bg)',
+        border: '2px solid var(--pixel-border)',
+        borderRadius: 0,
+        padding: '4px 8px',
+        boxShadow: 'var(--pixel-shadow)',
+      }}
+    >
+      <button
+        style={undoDisabled ? actionBarBtnDisabled : actionBarBtnStyle}
+        onClick={undoDisabled ? undefined : editor.handleUndo}
+        title="Undo (Ctrl+Z)"
+      >
+        Undo
+      </button>
+      <button
+        style={redoDisabled ? actionBarBtnDisabled : actionBarBtnStyle}
+        onClick={redoDisabled ? undefined : editor.handleRedo}
+        title="Redo (Ctrl+Y)"
+      >
+        Redo
+      </button>
+      <button
+        style={actionBarBtnStyle}
+        onClick={editor.handleSave}
+        title="Save layout"
+      >
+        Save
+      </button>
+      {!showResetConfirm ? (
+        <button
+          style={actionBarBtnStyle}
+          onClick={() => setShowResetConfirm(true)}
+          title="Reset to last saved layout"
+        >
+          Reset
+        </button>
+      ) : (
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <span style={{ fontSize: '22px', color: 'var(--pixel-reset-text)' }}>Reset?</span>
+          <button
+            style={{ ...actionBarBtnStyle, background: 'var(--pixel-danger-bg)', color: '#fff' }}
+            onClick={() => { setShowResetConfirm(false); editor.handleReset() }}
+          >
+            Yes
+          </button>
+          <button
+            style={actionBarBtnStyle}
+            onClick={() => setShowResetConfirm(false)}
+          >
+            No
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Floating emoji reactions above characters (React overlay for proper emoji rendering) */
+function EmojiReactions({ officeState, containerRef, zoom, panRef }: {
+  officeState: OfficeState
+  containerRef: React.RefObject<HTMLDivElement | null>
+  zoom: number
+  panRef: React.RefObject<{ x: number; y: number }>
+}) {
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    let rafId = 0
+    const tick = () => { setTick(n => n + 1); rafId = requestAnimationFrame(tick) }
+    rafId = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafId)
+  }, [])
+
+  const el = containerRef.current
+  if (!el) return null
+  const rect = el.getBoundingClientRect()
+  const dpr = window.devicePixelRatio || 1
+  const canvasW = Math.round(rect.width * dpr)
+  const canvasH = Math.round(rect.height * dpr)
+  const layout = officeState.getLayout()
+  const mapW = layout.cols * 16 * zoom
+  const mapH = layout.rows * 16 * zoom
+  const deviceOffsetX = Math.floor((canvasW - mapW) / 2) + Math.round(panRef.current.x)
+  const deviceOffsetY = Math.floor((canvasH - mapH) / 2) + Math.round(panRef.current.y)
+
+  return (
+    <>
+      {Array.from(officeState.characters.values()).map(ch => {
+        if (!ch.emojiReaction) return null
+        const { emoji, timer } = ch.emojiReaction
+        const sittingOffset = ch.state === CharacterState.TYPE ? 6 : 0
+        const screenX = (deviceOffsetX + ch.x * zoom) / dpr
+        const screenY = (deviceOffsetY + (ch.y + sittingOffset - 28) * zoom) / dpr
+
+        // Float upward as timer decreases, fade out in last second
+        const progress = 1 - timer / 3.0
+        const floatY = -progress * 20
+        const opacity = timer < 1.0 ? timer : 1.0
+
+        return (
+          <div
+            key={`emoji-${ch.id}`}
+            style={{
+              position: 'absolute',
+              left: screenX,
+              top: screenY + floatY,
+              transform: 'translateX(-50%)',
+              fontSize: `${Math.max(20, zoom * 8)}px`,
+              opacity,
+              pointerEvents: 'none',
+              zIndex: 150,
+              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))',
+              transition: 'opacity 0.3s',
+            }}
+          >
+            {emoji}
+          </div>
+        )
+      })}
+    </>
+  )
 }
 
 function App() {
-  // Browser runtime (dev or static dist): dispatch mock messages after the
-  // useExtensionMessages listener has been registered.
+  const editor = useEditorActions(getOfficeState, editorState)
+
+  const isEditDirty = useCallback(() => editor.isEditMode && editor.isDirty, [editor.isEditMode, editor.isDirty])
+
+  const { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, agentNames } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
+
+  const [isDebugMode, setIsDebugMode] = useState(false)
+  const [showNameLabels, setShowNameLabels] = useState(true)
+  const [gameCoins, setGameCoins] = useState(0)
+  const [agentProfiles, setAgentProfiles] = useState<Record<number, AgentProfileData>>({})
+
+  const handleToggleDebugMode = useCallback(() => setIsDebugMode((prev) => !prev), [])
+  const getSelectedAgentId = useCallback(() => getOfficeState().selectedAgentId, [])
+  const isAgentIdle = useCallback((id: number) => {
+    const ch = getOfficeState().characters.get(id)
+    return ch ? !ch.isActive : true
+  }, [])
+  const handleToggleNameLabels = useCallback(() => setShowNameLabels((prev) => !prev), [])
+
+  // Listen for game state updates from server
   useEffect(() => {
-    if (isBrowserRuntime) {
-      void import('./browserMock.js').then(({ dispatchMockMessages }) => dispatchMockMessages());
+    const handler = (e: MessageEvent) => {
+      const msg = e.data
+      if (msg.type === 'gameUpdate') {
+        setGameCoins(msg.coins ?? 0)
+        setAgentProfiles(msg.agents ?? {})
+      } else if (msg.type === 'gameCoinEarned') {
+        setGameCoins(msg.totalCoins ?? 0)
+      } else if (msg.type === 'gameAnimation') {
+        // Trigger character animation for game actions
+        const os = getOfficeState()
+        const agentId = msg.agentId as number
+        const actionEmoji = msg.emoji as string
+        const ch = os.characters.get(agentId)
+
+        // Show floating emoji reaction on the character
+        if (ch && actionEmoji) {
+          ch.emojiReaction = { emoji: actionEmoji, timer: 3.0 }
+        }
+
+        if (msg.action === 'tea' || msg.action === 'pizza') {
+          // Send to kitchen (only if idle)
+          if (ch && !ch.isActive) {
+            os.sendCharacterToZone(ch, 'kitchen')
+          }
+        } else if (msg.action === 'party') {
+          // Send ALL characters to meeting room for party
+          for (const c of os.characters.values()) {
+            if (c.state !== CharacterState.WALK) {
+              os.sendCharacterToZone(c, 'meeting')
+              c.emojiReaction = { emoji: '🎉', timer: 4.0 }
+            }
+          }
+        }
+        // Trigger sparkle effect for salary/promote
+        if (msg.action === 'salary' || msg.action === 'promote') {
+          const ch = os.characters.get(agentId)
+          if (ch) {
+            ch.sparkleTimer = 3.0
+            ch.sparkleParticles = Array.from({ length: 10 }, () => ({
+              x: (Math.random() - 0.5) * 24,
+              y: -Math.random() * 20 - 8,
+              delay: Math.random() * 0.8,
+            }))
+          }
+        }
+      }
     }
-  }, []);
-
-  const editor = useEditorActions(getOfficeState, editorState);
-
-  const isEditDirty = useCallback(
-    () => editor.isEditMode && editor.isDirty,
-    [editor.isEditMode, editor.isDirty],
-  );
-
-  const {
-    agents,
-    selectedAgent,
-    agentTools,
-    agentStatuses,
-    subagentTools,
-    subagentCharacters,
-    layoutReady,
-    layoutWasReset,
-    loadedAssets,
-    workspaceFolders,
-    externalAssetDirectories,
-    lastSeenVersion,
-    extensionVersion,
-    watchAllSessions,
-    setWatchAllSessions,
-    alwaysShowLabels,
-    hooksEnabled,
-    setHooksEnabled,
-    hooksInfoShown,
-  } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty);
-
-  // Show migration notice once layout reset is detected
-  const [migrationNoticeDismissed, setMigrationNoticeDismissed] = useState(false);
-  const showMigrationNotice = layoutWasReset && !migrationNoticeDismissed;
-
-  const [isChangelogOpen, setIsChangelogOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isHooksInfoOpen, setIsHooksInfoOpen] = useState(false);
-  const [hooksTooltipDismissed, setHooksTooltipDismissed] = useState(false);
-  const [isDebugMode, setIsDebugMode] = useState(false);
-  const [alwaysShowOverlay, setAlwaysShowOverlay] = useState(false);
-
-  const currentMajorMinor = toMajorMinor(extensionVersion);
-
-  const handleWhatsNewDismiss = useCallback(() => {
-    vscode.postMessage({ type: 'setLastSeenVersion', version: currentMajorMinor });
-  }, [currentMajorMinor]);
-
-  const handleOpenChangelog = useCallback(() => {
-    setIsChangelogOpen(true);
-    vscode.postMessage({ type: 'setLastSeenVersion', version: currentMajorMinor });
-  }, [currentMajorMinor]);
-
-  // Sync alwaysShowOverlay from persisted settings
-  useEffect(() => {
-    setAlwaysShowOverlay(alwaysShowLabels);
-  }, [alwaysShowLabels]);
-
-  const handleToggleDebugMode = useCallback(() => setIsDebugMode((prev) => !prev), []);
-  const handleToggleAlwaysShowOverlay = useCallback(() => {
-    setAlwaysShowOverlay((prev) => {
-      const newVal = !prev;
-      vscode.postMessage({ type: 'setAlwaysShowLabels', enabled: newVal });
-      return newVal;
-    });
-  }, []);
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [])
 
   const handleSelectAgent = useCallback((id: number) => {
-    vscode.postMessage({ type: 'focusAgent', id });
-  }, []);
+    vscode.postMessage({ type: 'focusAgent', id })
+  }, [])
 
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null)
 
-  const [editorTickForKeyboard, setEditorTickForKeyboard] = useState(0);
+  const [editorTickForKeyboard, setEditorTickForKeyboard] = useState(0)
   useEditorKeyboard(
     editor.isEditMode,
     editorState,
@@ -126,50 +325,60 @@ function App() {
     editor.handleRedo,
     useCallback(() => setEditorTickForKeyboard((n) => n + 1), []),
     editor.handleToggleEditMode,
-  );
+  )
 
   const handleCloseAgent = useCallback((id: number) => {
-    vscode.postMessage({ type: 'closeAgent', id });
-  }, []);
+    vscode.postMessage({ type: 'closeAgent', id })
+  }, [])
 
   const handleClick = useCallback((agentId: number) => {
     // If clicked agent is a sub-agent, focus the parent's terminal instead
-    const os = getOfficeState();
-    const meta = os.subagentMeta.get(agentId);
-    const focusId = meta ? meta.parentAgentId : agentId;
-    vscode.postMessage({ type: 'focusAgent', id: focusId });
-  }, []);
+    const os = getOfficeState()
+    const meta = os.subagentMeta.get(agentId)
+    const focusId = meta ? meta.parentAgentId : agentId
+    vscode.postMessage({ type: 'focusAgent', id: focusId })
+  }, [])
 
-  const officeState = getOfficeState();
+  const officeState = getOfficeState()
 
   // Force dependency on editorTickForKeyboard to propagate keyboard-triggered re-renders
-  void editorTickForKeyboard;
+  void editorTickForKeyboard
 
   // Show "Press R to rotate" hint when a rotatable item is selected or being placed
-  const showRotateHint =
-    editor.isEditMode &&
-    (() => {
-      if (editorState.selectedFurnitureUid) {
-        const item = officeState
-          .getLayout()
-          .furniture.find((f) => f.uid === editorState.selectedFurnitureUid);
-        if (item && isRotatable(item.type)) return true;
-      }
-      if (
-        editorState.activeTool === EditTool.FURNITURE_PLACE &&
-        isRotatable(editorState.selectedFurnitureType)
-      ) {
-        return true;
-      }
-      return false;
-    })();
+  const showRotateHint = editor.isEditMode && (() => {
+    if (editorState.selectedFurnitureUid) {
+      const item = officeState.getLayout().furniture.find((f) => f.uid === editorState.selectedFurnitureUid)
+      if (item && isRotatable(item.type)) return true
+    }
+    if (editorState.activeTool === EditTool.FURNITURE_PLACE && isRotatable(editorState.selectedFurnitureType)) {
+      return true
+    }
+    return false
+  })()
 
   if (!layoutReady) {
-    return <div className="w-full h-full flex items-center justify-center ">Loading...</div>;
+    return (
+      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--vscode-foreground)' }}>
+        Loading...
+      </div>
+    )
   }
 
   return (
-    <div ref={containerRef} className="w-full h-full relative overflow-hidden">
+    <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+      <style>{`
+        @keyframes pixel-agents-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.3; }
+        }
+        .pixel-agents-pulse { animation: pixel-agents-pulse ${PULSE_ANIMATION_DURATION_SEC}s ease-in-out infinite; }
+        @keyframes pixel-agents-notif {
+          0% { opacity: 1; transform: translateY(0); }
+          70% { opacity: 1; transform: translateY(-10px); }
+          100% { opacity: 0; transform: translateY(-20px); }
+        }
+      `}</style>
+
       <OfficeCanvas
         officeState={officeState}
         onClick={handleClick}
@@ -187,70 +396,118 @@ function App() {
         panRef={editor.panRef}
       />
 
-      {!isDebugMode ? (
-        <>
-          <ZoomControls zoom={editor.zoom} onZoomChange={editor.handleZoomChange} />
+      <ZoomControls zoom={editor.zoom} onZoomChange={editor.handleZoomChange} />
 
-          {/* Vignette overlay */}
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{ background: 'var(--vignette)' }}
+      {/* Vignette overlay */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'var(--pixel-vignette)',
+          pointerEvents: 'none',
+          zIndex: 40,
+        }}
+      />
+
+      {/* Day/night cycle overlay — warm at morning/evening, cool at night */}
+      <DayNightOverlay />
+
+      <BottomToolbar
+        isEditMode={editor.isEditMode}
+        onOpenClaude={editor.handleOpenClaude}
+        onToggleEditMode={editor.handleToggleEditMode}
+        isDebugMode={isDebugMode}
+        onToggleDebugMode={handleToggleDebugMode}
+        showNameLabels={showNameLabels}
+        onToggleNameLabels={handleToggleNameLabels}
+      />
+
+      {editor.isEditMode && editor.isDirty && (
+        <EditActionBar editor={editor} editorState={editorState} />
+      )}
+
+      {showRotateHint && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 8,
+            left: '50%',
+            transform: editor.isDirty ? 'translateX(calc(-50% + 100px))' : 'translateX(-50%)',
+            zIndex: 49,
+            background: 'var(--pixel-hint-bg)',
+            color: '#fff',
+            fontSize: '20px',
+            padding: '3px 8px',
+            borderRadius: 0,
+            border: '2px solid var(--pixel-accent)',
+            boxShadow: 'var(--pixel-shadow)',
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Press <b>R</b> to rotate
+        </div>
+      )}
+
+      {editor.isEditMode && (() => {
+        // Compute selected furniture color from current layout
+        const selUid = editorState.selectedFurnitureUid
+        const selColor = selUid
+          ? officeState.getLayout().furniture.find((f) => f.uid === selUid)?.color ?? null
+          : null
+        return (
+          <EditorToolbar
+            activeTool={editorState.activeTool}
+            selectedTileType={editorState.selectedTileType}
+            selectedFurnitureType={editorState.selectedFurnitureType}
+            selectedFurnitureUid={selUid}
+            selectedFurnitureColor={selColor}
+            floorColor={editorState.floorColor}
+            wallColor={editorState.wallColor}
+            onToolChange={editor.handleToolChange}
+            onTileTypeChange={editor.handleTileTypeChange}
+            onFloorColorChange={editor.handleFloorColorChange}
+            onWallColorChange={editor.handleWallColorChange}
+            onSelectedFurnitureColorChange={editor.handleSelectedFurnitureColorChange}
+            onFurnitureTypeChange={editor.handleFurnitureTypeChange}
+            loadedAssets={loadedAssets}
           />
+        )
+      })()}
 
-          {editor.isEditMode && editor.isDirty && (
-            <EditActionBar editor={editor} editorState={editorState} />
-          )}
+      <ToolOverlay
+        officeState={officeState}
+        agents={agents}
+        agentTools={agentTools}
+        subagentCharacters={subagentCharacters}
+        containerRef={containerRef}
+        zoom={editor.zoom}
+        panRef={editor.panRef}
+        onCloseAgent={handleCloseAgent}
+      />
 
-          {showRotateHint && (
-            <div
-              className="absolute left-1/2 -translate-x-1/2 z-11 bg-accent-bright text-white text-sm py-3 px-8 rounded-none border-2 border-accent shadow-pixel pointer-events-none whitespace-nowrap"
-              style={{ top: editor.isDirty ? 64 : 8 }}
-            >
-              Rotate (R)
-            </div>
-          )}
+      {showNameLabels && (
+        <AgentLabels
+          officeState={officeState}
+          agents={agents}
+          agentStatuses={agentStatuses}
+          containerRef={containerRef}
+          zoom={editor.zoom}
+          panRef={editor.panRef}
+          subagentCharacters={subagentCharacters}
+          agentNames={agentNames}
+        />
+      )}
 
-          {editor.isEditMode &&
-            (() => {
-              const selUid = editorState.selectedFurnitureUid;
-              const selColor = selUid
-                ? (officeState.getLayout().furniture.find((f) => f.uid === selUid)?.color ?? null)
-                : null;
-              return (
-                <EditorToolbar
-                  activeTool={editorState.activeTool}
-                  selectedTileType={editorState.selectedTileType}
-                  selectedFurnitureType={editorState.selectedFurnitureType}
-                  selectedFurnitureUid={selUid}
-                  selectedFurnitureColor={selColor}
-                  floorColor={editorState.floorColor}
-                  wallColor={editorState.wallColor}
-                  selectedWallSet={editorState.selectedWallSet}
-                  onToolChange={editor.handleToolChange}
-                  onTileTypeChange={editor.handleTileTypeChange}
-                  onFloorColorChange={editor.handleFloorColorChange}
-                  onWallColorChange={editor.handleWallColorChange}
-                  onWallSetChange={editor.handleWallSetChange}
-                  onSelectedFurnitureColorChange={editor.handleSelectedFurnitureColorChange}
-                  onFurnitureTypeChange={editor.handleFurnitureTypeChange}
-                  loadedAssets={loadedAssets}
-                />
-              );
-            })()}
+      {/* Floating emoji reactions */}
+      <EmojiReactions
+        officeState={officeState}
+        containerRef={containerRef}
+        zoom={editor.zoom}
+        panRef={editor.panRef}
+      />
 
-          <ToolOverlay
-            officeState={officeState}
-            agents={agents}
-            agentTools={agentTools}
-            subagentCharacters={subagentCharacters}
-            containerRef={containerRef}
-            zoom={editor.zoom}
-            panRef={editor.panRef}
-            onCloseAgent={handleCloseAgent}
-            alwaysShowOverlay={alwaysShowOverlay}
-          />
-        </>
-      ) : (
+      {isDebugMode && (
         <DebugView
           agents={agents}
           selectedAgent={selectedAgent}
@@ -261,113 +518,14 @@ function App() {
         />
       )}
 
-      {/* Hooks first-run tooltip */}
-      {!hooksInfoShown && !hooksTooltipDismissed && (
-        <Tooltip
-          title="Instant Detection Active"
-          position="top-right"
-          onDismiss={() => {
-            setHooksTooltipDismissed(true);
-            vscode.postMessage({ type: 'setHooksInfoShown' });
-          }}
-        >
-          <span className="text-sm text-text leading-none">
-            Your agents now respond in real-time.{' '}
-            <span
-              className="text-accent cursor-pointer underline"
-              onClick={() => {
-                setIsHooksInfoOpen(true);
-                setHooksTooltipDismissed(true);
-                vscode.postMessage({ type: 'setHooksInfoShown' });
-              }}
-            >
-              View more
-            </span>
-          </span>
-        </Tooltip>
-      )}
-
-      {/* Hooks info modal */}
-      <Modal
-        isOpen={isHooksInfoOpen}
-        onClose={() => setIsHooksInfoOpen(false)}
-        title="Instant Detection is ON"
-        zIndex={52}
-      >
-        <div className="text-base text-text px-10" style={{ lineHeight: 1.4 }}>
-          <p className="mb-8">Your Pixel Agents office now reacts in real-time:</p>
-          <ul className="mb-8 pl-18 list-disc m-0">
-            <li className="text-sm mb-2">Permission prompts appear instantly</li>
-            <li className="text-sm mb-2">Turn completions detected the moment they happen</li>
-            <li className="text-sm mb-2">Sound notifications play immediately</li>
-          </ul>
-          <p className="mb-12 text-text-muted">
-            This works through Claude Code Hooks, small event listeners that notify Pixel Agents
-            whenever something happens in your Claude sessions.
-          </p>
-          <div className="text-center">
-            <button
-              onClick={() => setIsHooksInfoOpen(false)}
-              className="py-4 px-20 text-lg bg-accent text-white border-2 border-accent rounded-none cursor-pointer shadow-pixel"
-            >
-              Got it
-            </button>
-          </div>
-          <p className="mt-8 text-xs text-text-muted text-center">
-            To disable, go to Settings {'>'} Instant Detection
-          </p>
-        </div>
-      </Modal>
-
-      <BottomToolbar
-        isEditMode={editor.isEditMode}
-        onOpenClaude={editor.handleOpenClaude}
-        onToggleEditMode={editor.handleToggleEditMode}
-        isSettingsOpen={isSettingsOpen}
-        onToggleSettings={() => setIsSettingsOpen((v) => !v)}
-        workspaceFolders={workspaceFolders}
+      <GameHud
+        coins={gameCoins}
+        getSelectedAgentId={getSelectedAgentId}
+        isAgentIdle={isAgentIdle}
+        agentProfiles={agentProfiles}
       />
-
-      <VersionIndicator
-        currentVersion={extensionVersion}
-        lastSeenVersion={lastSeenVersion}
-        onDismiss={handleWhatsNewDismiss}
-        onOpenChangelog={handleOpenChangelog}
-      />
-
-      <ChangelogModal
-        isOpen={isChangelogOpen}
-        onClose={() => setIsChangelogOpen(false)}
-        currentVersion={extensionVersion}
-      />
-
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        isDebugMode={isDebugMode}
-        onToggleDebugMode={handleToggleDebugMode}
-        alwaysShowOverlay={alwaysShowOverlay}
-        onToggleAlwaysShowOverlay={handleToggleAlwaysShowOverlay}
-        externalAssetDirectories={externalAssetDirectories}
-        watchAllSessions={watchAllSessions}
-        onToggleWatchAllSessions={() => {
-          const newVal = !watchAllSessions;
-          setWatchAllSessions(newVal);
-          vscode.postMessage({ type: 'setWatchAllSessions', enabled: newVal });
-        }}
-        hooksEnabled={hooksEnabled}
-        onToggleHooksEnabled={() => {
-          const newVal = !hooksEnabled;
-          setHooksEnabled(newVal);
-          vscode.postMessage({ type: 'setHooksEnabled', enabled: newVal });
-        }}
-      />
-
-      {showMigrationNotice && (
-        <MigrationNotice onDismiss={() => setMigrationNoticeDismissed(true)} />
-      )}
     </div>
-  );
+  )
 }
 
-export default App;
+export default App

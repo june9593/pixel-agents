@@ -1,8 +1,15 @@
-# Compiled output
-out
-dist
-node_modules
+# Build output
+dist/
+out/
 *.tsbuildinfo
+
+# Dependencies
+node_modules/
+web/node_modules/
+webview-ui/node_modules/
+
+# npm pack artifacts
+*.tgz
 
 # Logs
 /logs
@@ -14,16 +21,7 @@ npm-debug.log*
 Thumbs.db
 
 # IDE
-.vscode-test/
 /.idea
-
-# E2E test artifacts
-test-results/
-playwright-report/
-
-# Build artifacts
-*.vsix
-*.map
 
 # Environment files
 .env*
@@ -32,7 +30,6 @@ playwright-report/
 # Project-specific
 .claude/
 /sprites-export
-web/node_modules/
 
 # Local notes (not for commit)
 /notes/
