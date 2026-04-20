@@ -30,6 +30,22 @@ export function clearColorizeCache(): void {
 }
 
 /**
+ * Apply contrast (expand/compress around 0.5) and brightness (shift) to a lightness value.
+ * Both inputs are -100..100 sliders; output is clamped to 0..1.
+ */
+export function applyContrastBrightness(lightness: number, contrast: number, brightness: number): number {
+  let l = lightness
+  if (contrast !== 0) {
+    const factor = (100 + contrast) / 100
+    l = 0.5 + (l - 0.5) * factor
+  }
+  if (brightness !== 0) {
+    l = l + brightness / 200
+  }
+  return Math.max(0, Math.min(1, l))
+}
+
+/**
  * Colorize a sprite using HSL transformation.
  *
  * Algorithm (Photoshop Colorize-style):
@@ -56,21 +72,8 @@ export function colorizeSprite(sprite: SpriteData, color: FloorColor): SpriteDat
       const g = parseInt(pixel.slice(3, 5), 16)
       const bv = parseInt(pixel.slice(5, 7), 16)
       // Use perceived luminance for grayscale
-      let lightness = (0.299 * r + 0.587 * g + 0.114 * bv) / 255
-
-      // Apply contrast: expand/compress around 0.5
-      if (c !== 0) {
-        const factor = (100 + c) / 100
-        lightness = 0.5 + (lightness - 0.5) * factor
-      }
-
-      // Apply brightness: shift up/down
-      if (b !== 0) {
-        lightness = lightness + b / 200
-      }
-
-      // Clamp
-      lightness = Math.max(0, Math.min(1, lightness))
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * bv) / 255
+      const lightness = applyContrastBrightness(luminance, c, b)
 
       // Convert HSL to RGB
       const satFrac = s / 100
@@ -84,7 +87,7 @@ export function colorizeSprite(sprite: SpriteData, color: FloorColor): SpriteDat
 }
 
 /** Convert HSL (h: 0-360, s: 0-1, l: 0-1) to #RRGGBB hex string */
-function hslToHex(h: number, s: number, l: number): string {
+export function hslToHex(h: number, s: number, l: number): string {
   const c = (1 - Math.abs(2 * l - 1)) * s
   const hp = h / 60
   const x = c * (1 - Math.abs(hp % 2 - 1))
@@ -155,19 +158,8 @@ export function adjustSprite(sprite: SpriteData, color: FloorColor): SpriteData 
       // Shift saturation
       const newS = Math.max(0, Math.min(1, origS + sShift / 100))
 
-      // Apply contrast: expand/compress around 0.5
-      let lightness = origL
-      if (c !== 0) {
-        const factor = (100 + c) / 100
-        lightness = 0.5 + (lightness - 0.5) * factor
-      }
-
-      // Apply brightness
-      if (b !== 0) {
-        lightness = lightness + b / 200
-      }
-
-      lightness = Math.max(0, Math.min(1, lightness))
+      // Apply contrast + brightness
+      const lightness = applyContrastBrightness(origL, c, b)
 
       const hex = hslToHex(newH, newS, lightness)
       newRow.push(hex)
