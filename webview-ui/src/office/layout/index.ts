@@ -1,13 +1,17 @@
-export type { CatalogEntryWithCategory, FurnitureCategory } from './furnitureCatalog.js';
-export { FURNITURE_CATEGORIES, getCatalogByCategory, getCatalogEntry } from './furnitureCatalog.js';
+export { FURNITURE_CATALOG, getCatalogEntry, getCatalogByCategory, FURNITURE_CATEGORIES } from './furnitureCatalog.js'
+export type { FurnitureCategory, CatalogEntryWithCategory } from './furnitureCatalog.js'
 export {
-  createDefaultLayout,
-  deserializeLayout,
-  getBlockedTiles,
-  getSeatTiles,
-  layoutToFurnitureInstances,
-  layoutToSeats,
   layoutToTileMap,
+  layoutToFurnitureInstances,
+  getBlockedTiles,
+  layoutToSeats,
+  getSeatTiles,
+  createDefaultLayout,
   serializeLayout,
-} from './layoutSerializer.js';
-export { findPath, getWalkableTiles, isWalkable } from './tileMap.js';
+  deserializeLayout,
+} from './layoutSerializer.js'
+export {
+  isWalkable,
+  getWalkableTiles,
+  findPath,
+} from './tileMap.js'
