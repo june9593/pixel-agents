@@ -38,10 +38,10 @@ npx pixel-kosmos --kosmos-dir /path     # custom kosmos-app directory
 # OpenClaw (in addition to or instead of kosmos):
 npx pixel-kosmos --watch openclaw \
   --openclaw-url ws://localhost:18789 \
-  --openclaw-token mul_xxx              # OpenClaw only
+  --openclaw-token <your-token>         # OpenClaw only
 npx pixel-kosmos --watch all \
   --openclaw-url ws://localhost:18789 \
-  --openclaw-token mul_xxx              # both sources side-by-side
+  --openclaw-token <your-token>         # both sources side-by-side
 ```
 
 The `--watch` flag is auto-derived if omitted: `claude` if only kosmos is reachable, `openclaw` if only `--openclaw-url` is given, `all` if both. You can also set `OPENCLAW_URL` / `OPENCLAW_TOKEN` env vars instead of flags.
@@ -84,7 +84,7 @@ pixel-kosmos can also visualise [OpenClaw](https://github.com/openclaw/openclaw)
 - An OpenClaw instance reachable over WebSocket (default port `18789`)
 - An **operator token** with the `operator.read` scope
   - In the OpenClaw dashboard: **Settings → Tokens → Create token** → check `operator.read`
-  - The token starts with `oc_` and should be treated as a secret
+  - Treat the token as a secret — it is sent in the WebSocket handshake
 - Pass the token via `--openclaw-token` or the `OPENCLAW_TOKEN` env var
 
 ### Mode 1 — same machine
@@ -94,7 +94,7 @@ OpenClaw running on the same laptop as `pixel-kosmos`:
 ```bash
 pixel-kosmos --watch openclaw \
   --openclaw-url ws://localhost:18789 \
-  --openclaw-token oc_xxx
+  --openclaw-token <your-token>
 ```
 
 This is the simplest setup and the one used during local development.
@@ -110,7 +110,7 @@ ssh -L 18789:localhost:18789 user@your-host
 # In another terminal
 pixel-kosmos --watch openclaw \
   --openclaw-url ws://localhost:18789 \
-  --openclaw-token oc_xxx
+  --openclaw-token <your-token>
 ```
 
 The pixel UI keeps talking to `ws://localhost:18789` — the SSH tunnel ferries traffic to the remote OpenClaw transparently. Works through corporate NATs and doesn't need anything publicly exposed.
@@ -122,7 +122,7 @@ For a long-lived deployment where multiple people watch the same OpenClaw instan
 ```bash
 pixel-kosmos --watch openclaw \
   --openclaw-url wss://openclaw.your-tailnet.ts.net \
-  --openclaw-token oc_xxx
+  --openclaw-token <your-token>
 ```
 
 Notes:
@@ -135,7 +135,7 @@ Notes:
 ```bash
 pixel-kosmos --watch all \
   --openclaw-url ws://localhost:18789 \
-  --openclaw-token oc_xxx
+  --openclaw-token <your-token>
 ```
 
 Both sources stream into the same pixel office. Each agent label gets a small `KO` / `OC` source badge so you can tell them apart. The badge auto-hides when only one source is active.
@@ -151,7 +151,7 @@ Both sources stream into the same pixel office. Each agent label gets a small `K
 | Agents never appear | Confirm OpenClaw has at least one active session. The watcher only renders agents that have produced messages. |
 | Connection drops every few minutes | Reconnect is automatic with exponential backoff (max ~30 s). If your reverse proxy idle-times-out WebSockets, raise the timeout (Nginx `proxy_read_timeout 3600s`). |
 
-For verbose logs, run with `DEBUG=pixel-kosmos:* pixel-kosmos …`. To capture a session for a bug report, use `--capture session.jsonl` and attach the file.
+For more detail when reporting bugs, redirect stderr to a file: `pixel-kosmos … 2> pixel-kosmos.log` and attach it.
 
 ## License
 
