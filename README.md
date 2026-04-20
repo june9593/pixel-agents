@@ -19,6 +19,8 @@ npx pixel-kosmos --open
 
 This auto-detects your local kosmos-app profile, starts a server on port 3210, and opens the viewer. See **[web/README.md](web/README.md)** for full CLI options, architecture, and troubleshooting.
 
+`pixel-kosmos` can also visualise [OpenClaw](https://github.com/openclaw/openclaw) agents — alone or alongside kosmos. See **[Connecting to OpenClaw](web/README.md#connecting-to-openclaw)** for the three deployment modes (same-machine, SSH tunnel, cloud-hosted gateway).
+
 ## Project layout
 
 ```
