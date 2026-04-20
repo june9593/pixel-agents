@@ -92,6 +92,14 @@ export class OpenClawWatcher extends EventEmitter implements AgentWatcher {
         this.logger.warn('[openclaw] event handling failed:', err),
       )
     })
+    this.gateway.on('error', (err) => {
+      // Swallow gateway errors so they don't crash the host process; the
+      // gateway reconnects on its own. Log so operators can see them.
+      this.logger.warn('[openclaw] gateway error (will retry):', err?.message ?? err)
+    })
+    this.gateway.on('close', (info) => {
+      this.logger.warn('[openclaw] gateway closed:', info)
+    })
     this.gateway.on('open', () => {
       // (Re)subscribe and resync on every (re)connect.
       this.subscribeAndSync().catch((err) =>

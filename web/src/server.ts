@@ -20,6 +20,10 @@ import fs from 'fs'
 import os from 'os'
 import { fileURLToPath } from 'url'
 import { KosmosWatcher } from './kosmosWatcher.js'
+import { OpenClawWatcher } from './watchers/openclawWatcher.js'
+import { OpenClawGateway } from './watchers/openclawGateway.js'
+import { WatcherRegistry, type SourcedMessage } from './watchers/registry.js'
+import type { AgentWatcher } from './watchers/types.js'
 import { loadAllAssets, type AllAssets } from './webAssetLoader.js'
 import {
   loadGameState, saveGameState, ensureAgentProfile, recordToolCall,
@@ -107,10 +111,9 @@ if (fs.existsSync(webviewDistPath)) {
   console.log(`[Server] Run 'npm run build:webview' first, or use Vite dev server`)
 }
 
-// API endpoint: list agents
+// API endpoint: list agents (across all enabled watchers)
 app.get('/api/agents', (_req, res) => {
-  const info = watcher.getAgentInfo()
-  res.json(info)
+  res.json(registry.allAgentInfo())
 })
 
 // Game state API
@@ -120,7 +123,7 @@ app.get('/api/game', (_req, res) => {
 
 // Health check
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', agents: watcher.getAgents().length, coins: gameState.coins })
+  res.json({ status: 'ok', agents: registry.agentCount(), coins: gameState.coins, sources: registry.sources() })
 })
 
 // Fallback to index.html for SPA
@@ -243,10 +246,16 @@ function handleWebviewMessage(msg: Record<string, unknown>, ws: WebSocket): void
         console.log(`[Server] Sent ${loadedAssets.furniture.catalog.length} furniture assets`)
       }
 
-      // Send agent info (custom message for web UI — names/emoji)
-      ws.send(JSON.stringify({ type: 'kosmosAgentInfo', agents: watcher.getAgentInfo() }))
+      // Send agent info (custom message for web UI — names/emoji + source)
+      ws.send(JSON.stringify({ type: 'kosmosAgentInfo', agents: registry.allAgentInfo() }))
       // existingAgents MUST be sent BEFORE layoutLoaded.
-      ws.send(JSON.stringify(watcher.generateExistingAgentsMessage()))
+      // Merge across all watchers — webview only needs the union of agent ids.
+      const mergedAgents: number[] = []
+      for (const w of registry.watchers()) {
+        const m = w.generateExistingAgentsMessage() as { agents?: number[] }
+        if (Array.isArray(m.agents)) mergedAgents.push(...m.agents)
+      }
+      ws.send(JSON.stringify({ type: 'existingAgents', agents: mergedAgents, agentMeta: {} }))
       // Send layout last — this triggers agent creation from the buffer
       sendDefaultLayout(ws)
 
@@ -350,36 +359,68 @@ function handleWebviewMessage(msg: Record<string, unknown>, ws: WebSocket): void
   }
 }
 
-// ── Kosmos Watcher Setup ───────────────────────────────────────
+// ── Watcher Registry Setup ────────────────────────────────────
 
-const profile = detectProfile(KOSMOS_APP_DIR)
-const watcher = new KosmosWatcher({
-  kosmosAppDir: KOSMOS_APP_DIR,
-  profileAlias: profile,
-  pollInterval: 2000,
-})
+const WATCH_MODE = (process.env.WATCH_MODE || 'claude').toLowerCase()
+const KOSMOS_DISABLED = process.env.KOSMOS_DISABLED === '1'
+const OPENCLAW_URL = process.env.OPENCLAW_URL || ''
+const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN || ''
+
+const wantClaude = !KOSMOS_DISABLED && (WATCH_MODE === 'claude' || WATCH_MODE === 'all')
+const wantOpenClaw = (WATCH_MODE === 'openclaw' || WATCH_MODE === 'all') && !!OPENCLAW_URL
+
+const registry = new WatcherRegistry()
+let kosmosWatcherRef: KosmosWatcher | null = null
+let profile = ''
+
+if (wantClaude) {
+  profile = detectProfile(KOSMOS_APP_DIR)
+  kosmosWatcherRef = new KosmosWatcher({
+    kosmosAppDir: KOSMOS_APP_DIR,
+    profileAlias: profile,
+    pollInterval: 2000,
+  })
+  registry.add(kosmosWatcherRef as unknown as AgentWatcher)
+}
+
+if (wantOpenClaw) {
+  const gateway = new OpenClawGateway({
+    url: OPENCLAW_URL,
+    token: OPENCLAW_TOKEN,
+  })
+  // Allocate openclaw agent ids in 10000+ to never collide with kosmos.
+  const ocWatcher = new OpenClawWatcher({ gateway, idBase: 10000 })
+  registry.add(ocWatcher)
+}
+
+if (registry.watchers().length === 0) {
+  console.error('[Server] ❌ No watchers enabled. Set WATCH_MODE=claude|openclaw|all and provide --openclaw-url for openclaw mode.')
+  process.exit(1)
+}
+
+console.log(`[Server] Watchers enabled: ${registry.sources().join(', ')}`)
 
 // ── Game State ─────────────────────────────────────────────────
 
 const gameState: GameState = loadGameState()
 
 function syncAgentProfiles(): void {
-  for (const watched of watcher.getAgents()) {
-    ensureAgentProfile(gameState, watched.agentId, watched.agent.name, watched.agent.emoji)
+  for (const a of registry.allAgentInfo()) {
+    ensureAgentProfile(gameState, a.id, a.name, a.emoji)
   }
   saveGameState(gameState)
 }
 
 // Forward watcher messages to all WebSocket clients + track game events
-watcher.on('message', (msg) => {
+registry.onMessage((msg: SourcedMessage) => {
   broadcast(msg)
 
   // Track tool calls for game economy (only real-time events, not initial replay)
   if (msg.type === 'agentToolDone' && !msg._replay) {
     const agentId = msg.id as number
-    const watched = watcher.getAgents().find(a => a.agentId === agentId)
-    if (watched) {
-      ensureAgentProfile(gameState, agentId, watched.agent.name, watched.agent.emoji)
+    const found = registry.findById(agentId)
+    if (found) {
+      ensureAgentProfile(gameState, agentId, found.info.name, found.info.emoji)
       const result = recordToolCall(gameState, agentId)
       if (result.coinsEarned > 0) {
         broadcast({
@@ -411,9 +452,9 @@ watcher.on('message', (msg) => {
   // Text-only response counts as a light task (no mood penalty, +2 coins)
   if (msg.type === 'agentTextResponse' && !msg._replay) {
     const agentId = msg.id as number
-    const watched = watcher.getAgents().find(a => a.agentId === agentId)
-    if (watched) {
-      ensureAgentProfile(gameState, agentId, watched.agent.name, watched.agent.emoji)
+    const found = registry.findById(agentId)
+    if (found) {
+      ensureAgentProfile(gameState, agentId, found.info.name, found.info.emoji)
       const profile = gameState.agents[agentId]
       if (profile) {
         if (profile.lastActiveDate !== new Date().toISOString().slice(0, 10)) {
@@ -434,8 +475,11 @@ watcher.on('message', (msg) => {
 
 // ── Start Server ───────────────────────────────────────────────
 
-watcher.start()
-syncAgentProfiles()
+registry.startAll().then(() => {
+  syncAgentProfiles()
+}).catch((err) => {
+  console.error('[Server] startAll failed:', err)
+})
 
 server.listen(PORT, () => {
   console.log('')
@@ -443,22 +487,19 @@ server.listen(PORT, () => {
   console.log('  ║     🎮 Pixel Agents Web Server       ║')
   console.log('  ╠══════════════════════════════════════╣')
   console.log(`  ║  Local:   http://localhost:${PORT}        ║`)
-  console.log(`  ║  Profile: ${profile.padEnd(25)}║`)
-  console.log(`  ║  Agents:  ${String(watcher.getAgents().length).padEnd(25)}║`)
+  console.log(`  ║  Sources: ${registry.sources().join('+').padEnd(25)}║`)
+  if (profile) console.log(`  ║  Profile: ${profile.padEnd(25)}║`)
+  console.log(`  ║  Agents:  ${String(registry.agentCount()).padEnd(25)}║`)
   console.log('  ╚══════════════════════════════════════╝')
   console.log('')
 })
 
 // Graceful shutdown
-process.on('SIGINT', () => {
-  console.log('\n[Server] Shutting down...')
-  watcher.stop()
+async function shutdown(signal: string) {
+  console.log(`\n[Server] Shutting down (${signal})...`)
+  await registry.stopAll()
   server.close()
   process.exit(0)
-})
-
-process.on('SIGTERM', () => {
-  watcher.stop()
-  server.close()
-  process.exit(0)
-})
+}
+process.on('SIGINT', () => { void shutdown('SIGINT') })
+process.on('SIGTERM', () => { void shutdown('SIGTERM') })
