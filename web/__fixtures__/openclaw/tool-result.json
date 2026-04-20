@@ -1,0 +1,32 @@
+{
+  "messages": [
+    { "role": "user", "content": "Read README and tell me the title." },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_01READ001",
+          "name": "Read",
+          "input": { "path": "README.md" }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_01READ001",
+          "content": "# Pixel Kosmos\n\nVisualize agents in a pixel office."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "The README title is \"Pixel Kosmos\"." }
+      ]
+    }
+  ]
+}

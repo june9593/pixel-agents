@@ -1,0 +1,11 @@
+{
+  "messages": [
+    { "role": "user", "content": "Summarize today's commits in one sentence." },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "Today's commits refactor the watcher abstraction and wire OpenClaw transport into the web server." }
+      ]
+    }
+  ]
+}

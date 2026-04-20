@@ -1,0 +1,23 @@
+{
+  "messages": [
+    { "role": "user", "content": "List repos and check git status of the first one." },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "I'll list the repos and inspect the first." },
+        {
+          "type": "tool_use",
+          "id": "toolu_LIST_01",
+          "name": "Bash",
+          "input": { "command": "ls ~/code" }
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_STAT_02",
+          "name": "Bash",
+          "input": { "command": "git -C ~/code/pixel-agents status --short" }
+        }
+      ]
+    }
+  ]
+}
