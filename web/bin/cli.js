@@ -26,6 +26,37 @@ function getArg(name) {
   return null
 }
 const hasFlag = (name) => args.includes(`--${name}`)
+const hasShort = (s) => args.includes(s)
+
+if (hasFlag('help') || hasShort('-h')) {
+  console.log(`pixel-kosmos — Pixel art office visualization for kosmos-app AI agents
+
+Usage:
+  pixel-kosmos [options]
+  npx pixel-kosmos [options]
+
+Options:
+  --port <n>          HTTP port (default: 3210)
+  --profile <name>    kosmos-app profile name (default: auto-detect)
+  --kosmos-dir <path> Override kosmos-app data directory
+  --open              Open browser automatically after startup
+  -h, --help          Show this help and exit
+  -v, --version       Show version and exit
+
+Examples:
+  pixel-kosmos
+  pixel-kosmos --port 8080 --open
+  pixel-kosmos --profile myuser
+`)
+  process.exit(0)
+}
+
+if (hasFlag('version') || hasShort('-v')) {
+  const pkgPath = path.resolve(__dirname, '../package.json')
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+  console.log(pkg.version)
+  process.exit(0)
+}
 
 const port = getArg('port') || '3210'
 const profile = getArg('profile') || ''
