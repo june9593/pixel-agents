@@ -32,6 +32,7 @@ playwright-report/
 # Project-specific
 .claude/
 /sprites-export
+web/node_modules/
 
 # Local notes (not for commit)
 /notes/
