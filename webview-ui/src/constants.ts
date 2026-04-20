@@ -7,6 +7,9 @@ export const DEFAULT_ROWS = 11
 export const MAX_COLS = 64
 export const MAX_ROWS = 64
 
+/** Sentinel value passed to canvas renderer to mean "no ghost border / cursor disabled". */
+export const GHOST_BORDER_DISABLED = -999
+
 // ── Character Animation ─────────────────────────────────────
 export const WALK_SPEED_PX_PER_SEC = 48
 export const WALK_FRAME_DURATION_SEC = 0.15

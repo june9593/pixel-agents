@@ -5,7 +5,7 @@ import type { EditorRenderState, SelectionRenderState, DeleteButtonBounds, Rotat
 import { startGameLoop } from '../engine/gameLoop.js'
 import { renderFrame } from '../engine/renderer.js'
 import { TILE_SIZE, EditTool, CharacterState, Direction } from '../types.js'
-import { CAMERA_FOLLOW_LERP, CAMERA_FOLLOW_SNAP_THRESHOLD, ZOOM_MIN, ZOOM_MAX, ZOOM_SCROLL_THRESHOLD, PAN_MARGIN_FRACTION } from '../../constants.js'
+import { CAMERA_FOLLOW_LERP, CAMERA_FOLLOW_SNAP_THRESHOLD, ZOOM_MIN, ZOOM_MAX, ZOOM_SCROLL_THRESHOLD, PAN_MARGIN_FRACTION, GHOST_BORDER_DISABLED } from '../../constants.js'
 import { getCatalogEntry, isRotatable } from '../layout/furnitureCatalog.js'
 import { canPlaceFurniture, getWallPlacementRow } from '../editor/editorActions.js'
 import { vscode } from '../../vscodeApi.js'
@@ -113,8 +113,8 @@ export function OfficeCanvas({ officeState, onClick, isEditMode, editorState, on
             deleteButtonBounds: null,
             rotateButtonBounds: null,
             showGhostBorder,
-            ghostBorderHoverCol: showGhostBorder ? editorState.ghostCol : -999,
-            ghostBorderHoverRow: showGhostBorder ? editorState.ghostRow : -999,
+            ghostBorderHoverCol: showGhostBorder ? editorState.ghostCol : GHOST_BORDER_DISABLED,
+            ghostBorderHoverRow: showGhostBorder ? editorState.ghostRow : GHOST_BORDER_DISABLED,
           }
 
           // Ghost preview for furniture placement
