@@ -23,6 +23,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
+    "test": "tsx --test src/**/*.test.ts",
     "build": "npm run build:server && npm run build:webview-prod && npm run copy-assets",
     "build:server": "npx tsc -p tsconfig.build.json",
     "build:webview-prod": "cd ../webview-ui && npx vite build",
