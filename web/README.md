@@ -34,7 +34,17 @@ npx pixel-kosmos --port 8080            # custom port
 npx pixel-kosmos --profile myuser       # specify kosmos profile name
 npx pixel-kosmos --open                 # auto-open browser
 npx pixel-kosmos --kosmos-dir /path     # custom kosmos-app directory
+
+# OpenClaw (in addition to or instead of kosmos):
+npx pixel-kosmos --watch openclaw \
+  --openclaw-url ws://localhost:18789 \
+  --openclaw-token mul_xxx              # OpenClaw only
+npx pixel-kosmos --watch all \
+  --openclaw-url ws://localhost:18789 \
+  --openclaw-token mul_xxx              # both sources side-by-side
 ```
+
+The `--watch` flag is auto-derived if omitted: `claude` if only kosmos is reachable, `openclaw` if only `--openclaw-url` is given, `all` if both. You can also set `OPENCLAW_URL` / `OPENCLAW_TOKEN` env vars instead of flags.
 
 ## Requirements
 
@@ -64,6 +74,84 @@ pixel-kosmos watches your kosmos-app's chat session files and translates agent a
 - **Interactions**: Tea (10🪙), Pizza (15🪙), Salary (20🪙), Promote (50🪙), Party (30🪙)
 - **Achievements**: 9 unlockable badges
 - **Mood system**: Keep your agents happy!
+
+## Connecting to OpenClaw
+
+pixel-kosmos can also visualise [OpenClaw](https://github.com/openclaw/openclaw) agents — either standalone or alongside kosmos. Pick the deployment shape that matches where your OpenClaw instance lives.
+
+### Prerequisites
+
+- An OpenClaw instance reachable over WebSocket (default port `18789`)
+- An **operator token** with the `operator.read` scope
+  - In the OpenClaw dashboard: **Settings → Tokens → Create token** → check `operator.read`
+  - The token starts with `oc_` and should be treated as a secret
+- Pass the token via `--openclaw-token` or the `OPENCLAW_TOKEN` env var
+
+### Mode 1 — same machine
+
+OpenClaw running on the same laptop as `pixel-kosmos`:
+
+```bash
+pixel-kosmos --watch openclaw \
+  --openclaw-url ws://localhost:18789 \
+  --openclaw-token oc_xxx
+```
+
+This is the simplest setup and the one used during local development.
+
+### Mode 2 — remote OpenClaw via SSH tunnel
+
+OpenClaw lives on a remote box you can reach via SSH (e.g. a workstation or a dev VM). Forward the port locally:
+
+```bash
+# In one terminal — keep this open while pixel-kosmos runs
+ssh -L 18789:localhost:18789 user@your-host
+
+# In another terminal
+pixel-kosmos --watch openclaw \
+  --openclaw-url ws://localhost:18789 \
+  --openclaw-token oc_xxx
+```
+
+The pixel UI keeps talking to `ws://localhost:18789` — the SSH tunnel ferries traffic to the remote OpenClaw transparently. Works through corporate NATs and doesn't need anything publicly exposed.
+
+### Mode 3 — cloud-hosted Gateway (Tailscale Serve / reverse proxy)
+
+For a long-lived deployment where multiple people watch the same OpenClaw instance, expose the gateway over `wss://` via [Tailscale Serve](https://tailscale.com/kb/1242/tailscale-serve), Cloudflare Tunnel, or a plain Nginx reverse proxy with TLS:
+
+```bash
+pixel-kosmos --watch openclaw \
+  --openclaw-url wss://openclaw.your-tailnet.ts.net \
+  --openclaw-token oc_xxx
+```
+
+Notes:
+- **Always use `wss://`** (TLS) when traversing the public internet — the operator token is sent in the handshake
+- The proxy must forward the WebSocket upgrade headers and not buffer (`proxy_buffering off` for Nginx)
+- For Tailscale Serve: `tailscale serve --bg --https=443 http://localhost:18789` on the OpenClaw host
+
+### Watching kosmos and OpenClaw at the same time
+
+```bash
+pixel-kosmos --watch all \
+  --openclaw-url ws://localhost:18789 \
+  --openclaw-token oc_xxx
+```
+
+Both sources stream into the same pixel office. Each agent label gets a small `KO` / `OC` source badge so you can tell them apart. The badge auto-hides when only one source is active.
+
+### Troubleshooting
+
+| Symptom | Likely cause / fix |
+|---|---|
+| `gateway error: Unexpected server response: 401` | Token missing or wrong scope. Confirm the token has `operator.read` and isn't expired. |
+| `gateway error: Unexpected server response: 426` | Hit a non-WebSocket endpoint. Check the URL path — should be the OpenClaw ws root, not an HTTP one. |
+| Endless `gateway closed: { code: 1006 }` | Cannot reach the host at all. Test with `curl -v $URL` (substitute `wss://`→`https://`). For SSH tunnel: confirm the tunnel is still up. |
+| `pixel-kosmos` exits immediately with `--watch all` | Kosmos profile not found. Either pass `--kosmos-dir` or use `--watch openclaw` to skip kosmos. |
+| Agents never appear | Confirm OpenClaw has at least one active session. The watcher only renders agents that have produced messages. |
+| Connection drops every few minutes | Reconnect is automatic with exponential backoff (max ~30 s). If your reverse proxy idle-times-out WebSockets, raise the timeout (Nginx `proxy_read_timeout 3600s`). |
+
+For verbose logs, run with `DEBUG=pixel-kosmos:* pixel-kosmos …`. To capture a session for a bug report, use `--capture session.jsonl` and attach the file.
 
 ## License
 
