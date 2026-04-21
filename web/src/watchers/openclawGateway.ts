@@ -9,10 +9,12 @@
  *       req:   { type: "req",   id, method, params? }    client → server
  *       res:   { type: "res",   id, ok, payload?, error? } server → client
  *       event: { type: "event", event, payload?, seq?, stateVersion? } server → client
- *   - On WS open the SERVER sends `connect.challenge` (event) first.
- *   - Client then sends ONE `connect` request with auth.token INLINE in params
- *     (no separate `connect.auth` step; that was the bug).
- *   - Server replies with `hello-ok` payload containing protocol/policy/features.
+ *   - On WS open the CLIENT immediately sends ONE `connect` request as the
+ *     first frame: `{type:"req", id:"connect-handshake", method:"connect",
+ *     params:<ConnectParams with auth.token inline>}`. There is no server-
+ *     initiated `connect.challenge` event; that was a wrong assumption.
+ *   - Server replies with `{type:"res", id:"connect-handshake", ok:true,
+ *     payload:<hello-ok>}` containing protocol/policy/features.
  *
  * Auto-reconnect with exponential backoff (1s → 30s).
  * Tick-keepalive: if no frame arrives within `policy.tickIntervalMs * 2` after
@@ -227,14 +229,14 @@ const STOP_RECONNECT_NEXT_STEPS = new Set([
 
 /**
  * Lifecycle events:
- *   'open'           — connect.challenge received, hello-ok parsed, ready for RPCs
+ *   'open'           — connect-handshake hello-ok parsed, ready for RPCs
  *                      payload: HelloOk
  *   'reconnected'    — same as 'open' but fired after a reconnect (vs first connect)
  *   'close'          — socket dropped (will auto-reconnect unless stopped or auth-failed)
  *                      payload: { code, reason, wasOpen }
  *   'error'          — transport error or unexpected frame
  *                      payload: Error
- *   'event'          — server-pushed event (excluding connect.challenge which is internal)
+ *   'event'          — server-pushed event frame
  *                      payload: GatewayEvent
  *   'auth-failed'    — stop reconnecting; surface to user
  *                      payload: AuthFailure
@@ -254,7 +256,7 @@ export class OpenClawGateway extends EventEmitter {
   private isOpen = false
   private hasOpenedOnce = false
   private helloOk: HelloOk | null = null
-  /** Timer for connect.challenge wait. */
+  /** Timer for connect-handshake response wait. */
   private challengeTimer: ReturnType<typeof setTimeout> | null = null
   /** Timer that closes the conn after silence. Reset on every received frame. */
   private silenceTimer: ReturnType<typeof setTimeout> | null = null
@@ -360,10 +362,10 @@ export class OpenClawGateway extends EventEmitter {
     const ws = new this.opts.WebSocketImpl(this.opts.url)
     this.ws = ws as unknown as WebSocket
 
-    // Wait up to challengeTimeoutMs for the server's first connect.challenge.
+    // Wait up to challengeTimeoutMs for the server to ack our `connect` req.
     this.challengeTimer = setTimeout(() => {
       this.emit('error', new Error(
-        `connect.challenge not received within ${this.opts.challengeTimeoutMs}ms`,
+        `connect-handshake response not received within ${this.opts.challengeTimeoutMs}ms`,
       ))
       try { ws.close() } catch { /* ignore */ }
     }, this.opts.challengeTimeoutMs)
@@ -372,7 +374,8 @@ export class OpenClawGateway extends EventEmitter {
     this.armSilenceTimer(PRE_HANDSHAKE_TICK_MS)
 
     ws.on('open', () => {
-      // Per protocol: do NOTHING here. Wait for server's connect.challenge.
+      // Per protocol: client sends connect req as the FIRST frame.
+      this.sendConnectFrame()
     })
 
     ws.on('message', (raw: WebSocket.RawData) => {
@@ -412,10 +415,6 @@ export class OpenClawGateway extends EventEmitter {
 
     // Event frame
     if (msg.type === 'event' && typeof msg.event === 'string') {
-      if (msg.event === 'connect.challenge') {
-        this.handleConnectChallenge()
-        return
-      }
       // Don't surface internal events upward.
       const evt: GatewayEvent = {
         event: msg.event,
@@ -457,10 +456,7 @@ export class OpenClawGateway extends EventEmitter {
     this.emit('error', new Error(`Unknown frame type from gateway: ${String(msg.type)}`))
   }
 
-  private handleConnectChallenge(): void {
-    // We received the challenge — clear the wait timer.
-    this.clearChallengeTimer()
-
+  private sendConnectFrame(): void {
     if (!this.ws) return
 
     // Send the single `connect` req. We use a fixed id so handleConnectResponse can match.
@@ -495,6 +491,9 @@ export class OpenClawGateway extends EventEmitter {
   }
 
   private handleConnectResponse(msg: RawFrame): void {
+    // Connect response received — clear the handshake-wait timer.
+    this.clearChallengeTimer()
+
     // Guard: a stray late `connect-handshake` res after we're already open
     // must not re-fire 'open' or flip authFailed mid-session.
     if (this.isOpen) return
