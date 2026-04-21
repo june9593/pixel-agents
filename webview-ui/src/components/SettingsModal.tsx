@@ -1,12 +1,15 @@
-import { useState } from 'react'
-import { vscode } from '../vscodeApi.js'
+import { useState, useEffect } from 'react'
+import { vscode, isWebMode } from '../vscodeApi.js'
 import { isSoundEnabled, setSoundEnabled } from '../notificationSound.js'
+import { t, getLocale, setLocale, onLocaleChange, type Locale } from '../i18n.js'
 
 interface SettingsModalProps {
   isOpen: boolean
   onClose: () => void
   isDebugMode: boolean
   onToggleDebugMode: () => void
+  showNameLabels: boolean
+  onToggleNameLabels: () => void
 }
 
 const menuItemBase: React.CSSProperties = {
@@ -24,9 +27,12 @@ const menuItemBase: React.CSSProperties = {
   textAlign: 'left',
 }
 
-export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode }: SettingsModalProps) {
+export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode, showNameLabels, onToggleNameLabels }: SettingsModalProps) {
   const [hovered, setHovered] = useState<string | null>(null)
   const [soundLocal, setSoundLocal] = useState(isSoundEnabled)
+  const [locale, setLocaleState] = useState<Locale>(getLocale())
+
+  useEffect(() => onLocaleChange(() => setLocaleState(getLocale())), [])
 
   if (!isOpen) return null
 
@@ -72,7 +78,7 @@ export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode 
             marginBottom: '4px',
           }}
         >
-          <span style={{ fontSize: '24px', color: 'rgba(255, 255, 255, 0.9)' }}>Settings</span>
+          <span style={{ fontSize: '24px', color: 'rgba(255, 255, 255, 0.9)' }}>{t('settings')}</span>
           <button
             onClick={onClose}
             onMouseEnter={() => setHovered('close')}
@@ -93,6 +99,15 @@ export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode 
         </div>
         {/* Menu items */}
         <button
+          onClick={() => { const next = locale === 'en' ? 'zh' : 'en'; setLocale(next as Locale) }}
+          onMouseEnter={() => setHovered('lang')}
+          onMouseLeave={() => setHovered(null)}
+          style={{ ...menuItemBase, background: hovered === 'lang' ? 'rgba(255, 255, 255, 0.08)' : 'transparent' }}
+        >
+          <span>{t('language')}</span>
+          <span style={{ fontSize: '20px', opacity: 0.7 }}>{locale === 'en' ? '🇺🇸 EN' : '🇨🇳 中文'}</span>
+        </button>
+        <button
           onClick={() => {
             vscode.postMessage({ type: 'openSessionsFolder' })
             onClose()
@@ -104,11 +119,16 @@ export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode 
             background: hovered === 'sessions' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
           }}
         >
-          Open Sessions Folder
+          {t('open_sessions')}
         </button>
         <button
           onClick={() => {
-            vscode.postMessage({ type: 'exportLayout' })
+            if (isWebMode) {
+              // Browser file download
+              vscode.postMessage({ type: 'getLayoutForExport' })
+            } else {
+              vscode.postMessage({ type: 'exportLayout' })
+            }
             onClose()
           }}
           onMouseEnter={() => setHovered('export')}
@@ -118,11 +138,33 @@ export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode 
             background: hovered === 'export' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
           }}
         >
-          Export Layout
+          {t('export_layout')}
         </button>
         <button
           onClick={() => {
-            vscode.postMessage({ type: 'importLayout' })
+            if (isWebMode) {
+              // Browser file picker
+              const input = document.createElement('input')
+              input.type = 'file'
+              input.accept = '.json'
+              input.onchange = () => {
+                const file = input.files?.[0]
+                if (!file) return
+                const reader = new FileReader()
+                reader.onload = () => {
+                  try {
+                    const layout = JSON.parse(reader.result as string)
+                    if (layout.version === 1 && Array.isArray(layout.tiles)) {
+                      vscode.postMessage({ type: 'importLayoutData', layout })
+                    }
+                  } catch { /* ignore */ }
+                }
+                reader.readAsText(file)
+              }
+              input.click()
+            } else {
+              vscode.postMessage({ type: 'importLayout' })
+            }
             onClose()
           }}
           onMouseEnter={() => setHovered('import')}
@@ -132,7 +174,7 @@ export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode 
             background: hovered === 'import' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
           }}
         >
-          Import Layout
+          {t('import_layout')}
         </button>
         <button
           onClick={() => {
@@ -148,7 +190,7 @@ export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode 
             background: hovered === 'sound' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
           }}
         >
-          <span>Sound Notifications</span>
+          <span>{t('sound_notifications')}</span>
           <span
             style={{
               width: 14,
@@ -169,6 +211,35 @@ export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode 
           </span>
         </button>
         <button
+          onClick={onToggleNameLabels}
+          onMouseEnter={() => setHovered('names')}
+          onMouseLeave={() => setHovered(null)}
+          style={{
+            ...menuItemBase,
+            background: hovered === 'names' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+          }}
+        >
+          <span>{t('agent_names')}</span>
+          <span
+            style={{
+              width: 14,
+              height: 14,
+              border: '2px solid rgba(255, 255, 255, 0.5)',
+              borderRadius: 0,
+              background: showNameLabels ? 'rgba(90, 140, 255, 0.8)' : 'transparent',
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '12px',
+              lineHeight: 1,
+              color: '#fff',
+            }}
+          >
+            {showNameLabels ? 'X' : ''}
+          </span>
+        </button>
+        <button
           onClick={onToggleDebugMode}
           onMouseEnter={() => setHovered('debug')}
           onMouseLeave={() => setHovered(null)}
@@ -177,7 +248,7 @@ export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode 
             background: hovered === 'debug' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
           }}
         >
-          <span>Debug View</span>
+          <span>{t('debug_view')}</span>
           {isDebugMode && (
             <span
               style={{

@@ -1,9 +1,35 @@
-out
-dist
-node_modules
-.vscode-test/
-*.vsix
-.claude/
+# Build output
+dist/
+out/
+*.tsbuildinfo
+
+# Dependencies
+node_modules/
+web/node_modules/
+webview-ui/node_modules/
+
+# npm pack artifacts
+*.tgz
+
+# Logs
 /logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+/.idea
+
+# Environment files
+.env*
+!.env.example
+
+# Project-specific
+.claude/
 /sprites-export
-.env
+
+# Local notes (not for commit)
+/notes/

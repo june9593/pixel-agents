@@ -11,6 +11,34 @@ interface AgentLabelsProps {
   zoom: number
   panRef: React.RefObject<{ x: number; y: number }>
   subagentCharacters: SubagentCharacter[]
+  agentNames?: Record<number, { name: string; emoji: string; source?: 'kosmos' | 'openclaw' }>
+}
+
+// Tiny pixel badge to differentiate agent sources when multiple are active.
+// Returns null in the common single-source case so we don't clutter the UI.
+function SourceBadge({ source }: { source: 'kosmos' | 'openclaw' }) {
+  const isOpenClaw = source === 'openclaw'
+  return (
+    <span
+      title={isOpenClaw ? 'OpenClaw agent' : 'Kosmos agent'}
+      style={{
+        display: 'inline-block',
+        fontSize: '9px',
+        lineHeight: '10px',
+        padding: '1px 3px',
+        marginRight: 3,
+        verticalAlign: 'middle',
+        borderRadius: 2,
+        fontFamily: 'monospace',
+        letterSpacing: '0.5px',
+        textTransform: 'uppercase',
+        background: isOpenClaw ? '#a64bff' : '#3794ff',
+        color: '#fff',
+      }}
+    >
+      {isOpenClaw ? 'OC' : 'KO'}
+    </span>
+  )
 }
 
 export function AgentLabels({
@@ -21,6 +49,7 @@ export function AgentLabels({
   zoom,
   panRef,
   subagentCharacters,
+  agentNames,
 }: AgentLabelsProps) {
   const [, setTick] = useState(0)
   useEffect(() => {
@@ -55,6 +84,17 @@ export function AgentLabels({
   // All character IDs to render labels for (regular agents + sub-agents)
   const allIds = [...agents, ...subagentCharacters.map((s) => s.id)]
 
+  // Only show source badges when more than one source is active — avoids
+  // clutter in the common kosmos-only deployment.
+  const distinctSources = new Set<string>()
+  if (agentNames) {
+    for (const id of agents) {
+      const s = agentNames[id]?.source
+      if (s) distinctSources.add(s)
+    }
+  }
+  const showBadges = distinctSources.size >= 2
+
   return (
     <>
       {allIds.map((id) => {
@@ -78,7 +118,8 @@ export function AgentLabels({
           dotColor = 'var(--vscode-charts-blue, #3794ff)'
         }
 
-        const labelText = subLabelMap.get(id) || `Agent #${id}`
+        const agentInfo = agentNames?.[id]
+        const labelText = subLabelMap.get(id) || (agentInfo ? `${agentInfo.emoji} ${agentInfo.name}` : `Agent #${id}`)
 
         return (
           <div
@@ -121,6 +162,7 @@ export function AgentLabels({
                 textOverflow: isSub ? 'ellipsis' : undefined,
               }}
             >
+              {showBadges && agentInfo?.source && !isSub && <SourceBadge source={agentInfo.source} />}
               {labelText}
             </span>
           </div>

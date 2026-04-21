@@ -445,6 +445,74 @@ export function renderRotateButton(
   return { cx, cy, radius }
 }
 
+// ── Name labels ─────────────────────────────────────────────────
+
+/** Palette-based dot colors for each character skin */
+const PALETTE_COLORS = ['#e06060', '#60a0e0', '#e0c060', '#60c080', '#c070c0', '#e09050']
+
+export function renderNameLabels(
+  ctx: CanvasRenderingContext2D,
+  characters: Character[],
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+): void {
+  if (zoom < 2) return // too small to read
+
+  for (const ch of characters) {
+    if (!ch.displayName) continue
+    if (ch.matrixEffect) continue
+
+    // Strip emoji from display name for cleaner canvas rendering
+    const name = ch.displayName.replace(/[\u{1F000}-\u{1FFFF}]/gu, '').trim()
+    if (!name) continue
+
+    const sittingOffset = ch.state === CharacterState.TYPE ? CHARACTER_SITTING_OFFSET_PX : 0
+    const screenX = Math.round(offsetX + ch.x * zoom)
+    const screenY = Math.round(offsetY + (ch.y + sittingOffset) * zoom - 18 * zoom)
+
+    const fontSize = Math.max(7, Math.round(zoom * 3.5))
+    ctx.save()
+    ctx.font = `${fontSize}px 'FS Pixel Sans', monospace`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+
+    const metrics = ctx.measureText(name)
+    const dotSize = Math.round(zoom * 1.2)
+    const dotGap = Math.round(zoom * 1)
+    const padX = Math.round(zoom * 2)
+    const padY = Math.round(zoom * 1.2)
+    const totalTextW = dotSize + dotGap + metrics.width
+    const bgW = totalTextW + padX * 2
+    const bgH = fontSize + padY * 2
+    const bgX = Math.round(screenX - bgW / 2)
+    const bgY = Math.round(screenY - bgH / 2)
+
+    // Background: dark semi-transparent with 1px border
+    ctx.fillStyle = 'rgba(10, 10, 20, 0.75)'
+    ctx.fillRect(bgX, bgY, bgW, bgH)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'
+    ctx.lineWidth = 1
+    ctx.strokeRect(bgX + 0.5, bgY + 0.5, bgW - 1, bgH - 1)
+
+    // Colored dot (matches character palette)
+    const dotColor = PALETTE_COLORS[ch.palette % PALETTE_COLORS.length]
+    const dotX = bgX + padX + dotSize / 2
+    const dotY = screenY
+    ctx.fillStyle = dotColor
+    ctx.beginPath()
+    ctx.arc(dotX, dotY, dotSize / 2, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Name text
+    const textX = dotX + dotSize / 2 + dotGap + metrics.width / 2
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+    ctx.fillText(name, textX, screenY + 0.5)
+
+    ctx.restore()
+  }
+}
+
 // ── Speech bubbles ──────────────────────────────────────────────
 
 export function renderBubbles(
@@ -478,6 +546,83 @@ export function renderBubbles(
     ctx.save()
     if (alpha < 1.0) ctx.globalAlpha = alpha
     ctx.drawImage(cached, bubbleX, bubbleY)
+    ctx.restore()
+  }
+
+  // Sleepy "Zzz" for characters idle > 15 seconds
+  for (const ch of characters) {
+    if (!ch.idleElapsed || ch.idleElapsed < 15) continue
+    if (ch.bubbleType) continue // don't overlap with speech bubbles
+    if (ch.isActive) continue
+
+    const sittingOff = ch.state === CharacterState.TYPE ? BUBBLE_SITTING_OFFSET_PX : 0
+    const baseX = Math.round(offsetX + ch.x * zoom)
+    const baseY = Math.round(offsetY + (ch.y + sittingOff - 24) * zoom)
+
+    // Floating "z" characters with bobbing animation
+    const elapsed = ch.idleElapsed - 30
+    const fontSize = Math.max(6, Math.round(zoom * 3))
+    ctx.save()
+    ctx.font = `${fontSize}px 'FS Pixel Sans', monospace`
+    ctx.textAlign = 'center'
+
+    for (let i = 0; i < 3; i++) {
+      const t = (elapsed * 0.5 + i * 0.4) % 2.0
+      const floatY = -t * 8 * zoom
+      const alpha = t < 1.5 ? 0.6 : 0.6 * (2.0 - t) / 0.5
+      const size = fontSize - i * Math.round(zoom * 0.5)
+
+      ctx.globalAlpha = alpha
+      ctx.fillStyle = '#aabbee'
+      ctx.font = `${Math.max(4, size)}px 'FS Pixel Sans', monospace`
+      ctx.fillText('z', baseX + (i - 1) * zoom * 3, baseY + floatY - i * zoom * 2)
+    }
+    ctx.restore()
+  }
+}
+
+// ── Sparkle effects ─────────────────────────────────────────────
+
+const SPARKLE_COLORS = ['#FFD700', '#FFF8DC', '#FFFACD', '#FFE4B5', '#FFFFFF']
+
+export function renderSparkles(
+  ctx: CanvasRenderingContext2D,
+  characters: Character[],
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+): void {
+  for (const ch of characters) {
+    if (!ch.sparkleTimer || ch.sparkleTimer <= 0 || !ch.sparkleParticles) continue
+
+    const sittingOffset = ch.state === CharacterState.TYPE ? CHARACTER_SITTING_OFFSET_PX : 0
+    const baseX = offsetX + ch.x * zoom
+    const baseY = offsetY + (ch.y + sittingOffset - 12) * zoom
+
+    const elapsed = 2.0 - ch.sparkleTimer
+    ctx.save()
+
+    for (const p of ch.sparkleParticles) {
+      const t = Math.max(0, elapsed - p.delay)
+      if (t <= 0) continue
+
+      // Float upward and fade out
+      const progress = Math.min(t / 1.5, 1)
+      const alpha = 1 - progress
+      const floatY = -progress * 12 * zoom
+      const size = Math.max(1, Math.round(zoom * (1 - progress * 0.5)))
+
+      const sx = baseX + p.x * zoom
+      const sy = baseY + p.y * zoom + floatY
+
+      ctx.globalAlpha = alpha * 0.9
+      ctx.fillStyle = SPARKLE_COLORS[Math.floor(Math.random() * SPARKLE_COLORS.length)]
+
+      // Draw a tiny cross/star shape
+      ctx.fillRect(sx - size, sy, size * 2 + 1, 1)
+      ctx.fillRect(sx, sy - size, 1, size * 2 + 1)
+    }
+
     ctx.restore()
   }
 }
@@ -578,6 +723,11 @@ export function renderFrame(
 
   // Speech bubbles (always on top of characters)
   renderBubbles(ctx, characters, offsetX, offsetY, zoom)
+
+  // Sparkle effects (task completion celebration)
+  renderSparkles(ctx, characters, offsetX, offsetY, zoom)
+
+  // Name labels rendered via React overlay (not canvas) for emoji support
 
   // Editor overlays
   if (editor) {

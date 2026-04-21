@@ -44,6 +44,7 @@ export interface ExtensionMessageState {
   subagentCharacters: SubagentCharacter[]
   layoutReady: boolean
   loadedAssets?: { catalog: FurnitureAsset[]; sprites: Record<string, string[][]> }
+  agentNames: Record<number, { name: string; emoji: string; source?: 'kosmos' | 'openclaw' }>
 }
 
 function saveAgentSeats(os: OfficeState): void {
@@ -68,6 +69,7 @@ export function useExtensionMessages(
   const [subagentCharacters, setSubagentCharacters] = useState<SubagentCharacter[]>([])
   const [layoutReady, setLayoutReady] = useState(false)
   const [loadedAssets, setLoadedAssets] = useState<{ catalog: FurnitureAsset[]; sprites: Record<string, string[][]> } | undefined>()
+  const [agentNames, setAgentNames] = useState<Record<number, { name: string; emoji: string; source?: 'kosmos' | 'openclaw' }>>({})
 
   // Track whether initial layout has been loaded (ref to avoid re-render)
   const layoutReadyRef = useRef(false)
@@ -75,6 +77,18 @@ export function useExtensionMessages(
   useEffect(() => {
     // Buffer agents from existingAgents until layout is loaded
     let pendingAgents: Array<{ id: number; palette?: number; hueShift?: number; seatId?: string }> = []
+    // Cache agent names for applying displayName after character creation
+    const nameCache: Record<number, string> = {}
+
+    /** Apply cached displayName to all existing characters */
+    function applyDisplayNames(os: OfficeState): void {
+      for (const [id, name] of Object.entries(nameCache)) {
+        const ch = os.characters.get(Number(id))
+        if (ch && !ch.displayName) {
+          ch.displayName = name
+        }
+      }
+    }
 
     const handler = (e: MessageEvent) => {
       const msg = e.data
@@ -102,6 +116,8 @@ export function useExtensionMessages(
         pendingAgents = []
         layoutReadyRef.current = true
         setLayoutReady(true)
+        // Apply cached display names to newly created characters
+        applyDisplayNames(os)
         if (os.characters.size > 0) {
           saveAgentSeats(os)
         }
@@ -110,6 +126,11 @@ export function useExtensionMessages(
         setAgents((prev) => (prev.includes(id) ? prev : [...prev, id]))
         setSelectedAgent(id)
         os.addAgent(id)
+        // Apply cached display name
+        if (nameCache[id]) {
+          const ch = os.characters.get(id)
+          if (ch) ch.displayName = nameCache[id]
+        }
         saveAgentSeats(os)
       } else if (msg.type === 'agentClosed') {
         const id = msg.id as number
@@ -140,10 +161,21 @@ export function useExtensionMessages(
       } else if (msg.type === 'existingAgents') {
         const incoming = msg.agents as number[]
         const meta = (msg.agentMeta || {}) as Record<number, { palette?: number; hueShift?: number; seatId?: string }>
-        // Buffer agents — they'll be added in layoutLoaded after seats are built
-        for (const id of incoming) {
-          const m = meta[id]
-          pendingAgents.push({ id, palette: m?.palette, hueShift: m?.hueShift, seatId: m?.seatId })
+        if (layoutReadyRef.current) {
+          // Layout already loaded — add agents directly
+          for (const id of incoming) {
+            const m = meta[id]
+            if (!os.characters.has(id)) {
+              os.addAgent(id, m?.palette, m?.hueShift, m?.seatId, true)
+            }
+          }
+          saveAgentSeats(os)
+        } else {
+          // Buffer agents — they'll be added in layoutLoaded after seats are built
+          for (const id of incoming) {
+            const m = meta[id]
+            pendingAgents.push({ id, palette: m?.palette, hueShift: m?.hueShift, seatId: m?.seatId })
+          }
         }
         setAgents((prev) => {
           const ids = new Set(prev)
@@ -330,6 +362,26 @@ export function useExtensionMessages(
       } else if (msg.type === 'settingsLoaded') {
         const soundOn = msg.soundEnabled as boolean
         setSoundEnabled(soundOn)
+      } else if (msg.type === 'kosmosAgentInfo') {
+        // Custom message from web server with agent name/emoji info
+        const agentInfoList = msg.agents as Array<{ id: number; name: string; emoji: string; source?: 'kosmos' | 'openclaw' }>
+        if (Array.isArray(agentInfoList)) {
+          // Cache names and apply to any existing characters
+          for (const info of agentInfoList) {
+            nameCache[info.id] = `${info.emoji} ${info.name}`
+            const ch = os.characters.get(info.id)
+            if (ch) {
+              ch.displayName = nameCache[info.id]
+            }
+          }
+          setAgentNames((prev) => {
+            const next = { ...prev }
+            for (const info of agentInfoList) {
+              next[info.id] = { name: info.name, emoji: info.emoji, source: info.source }
+            }
+            return next
+          })
+        }
       } else if (msg.type === 'furnitureAssetsLoaded') {
         try {
           const catalog = msg.catalog as FurnitureAsset[]
@@ -341,6 +393,18 @@ export function useExtensionMessages(
         } catch (err) {
           console.error(`❌ Webview: Error processing furnitureAssetsLoaded:`, err)
         }
+      } else if (msg.type === 'layoutExportData') {
+        // Browser download of layout file
+        const layout = msg.layout
+        if (layout) {
+          const blob = new Blob([JSON.stringify(layout, null, 2)], { type: 'application/json' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = 'pixel-agents-layout.json'
+          a.click()
+          URL.revokeObjectURL(url)
+        }
       }
     }
     window.addEventListener('message', handler)
@@ -348,5 +412,5 @@ export function useExtensionMessages(
     return () => window.removeEventListener('message', handler)
   }, [getOfficeState])
 
-  return { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets }
+  return { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, agentNames }
 }

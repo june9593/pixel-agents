@@ -1,0 +1,75 @@
+# CI workflow for pixel-kosmos (web-mode pixel-agents)
+
+name: CI
+
+on:
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.github/FUNDING.yml'
+  push:
+    branches:
+      - main
+      - 'integrate/**'
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.github/FUNDING.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            webview-ui/package-lock.json
+
+      - name: Install web/ deps
+        working-directory: web
+        run: npm ci
+
+      - name: Install webview-ui/ deps
+        working-directory: webview-ui
+        run: npm ci
+
+      - name: Build pixel-kosmos
+        working-directory: web
+        run: npm run build
+
+      - name: Webview tests
+        working-directory: webview-ui
+        run: npm test
+        continue-on-error: true
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

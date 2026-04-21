@@ -193,4 +193,20 @@ export interface Character {
   matrixEffectTimer: number
   /** Per-column random seeds (16 values) for staggered rain timing */
   matrixEffectSeeds: number[]
+  /** Display name for the agent (set from kosmos-app) */
+  displayName?: string
+  /** Walk speed multiplier (1 = normal, >1 = faster for short trips) */
+  walkSpeedMultiplier?: number
+  /** Sparkle effect timer (counts down from 2.0 to 0 when task completes) */
+  sparkleTimer?: number
+  /** Sparkle particle positions (pre-generated on trigger) */
+  sparkleParticles?: Array<{ x: number; y: number; delay: number }>
+  /** Whether the character is on a zone visit (don't repath to seat mid-walk) */
+  zoneVisitActive?: boolean
+  /** Seconds spent continuously idle (for sleepy animation) */
+  idleElapsed?: number
+  /** Saved direction before hover face-user (restored on unhover) */
+  _savedDir?: Direction
+  /** Floating emoji reaction (e.g. ☕🍕💰) with countdown timer */
+  emojiReaction?: { emoji: string; timer: number }
 }

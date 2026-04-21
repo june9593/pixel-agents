@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { ToolActivity } from '../types.js'
 import type { OfficeState } from '../engine/officeState.js'
 import type { SubagentCharacter } from '../../hooks/useExtensionMessages.js'
 import { TILE_SIZE, CharacterState } from '../types.js'
 import { TOOL_OVERLAY_VERTICAL_OFFSET, CHARACTER_SITTING_OFFSET_PX } from '../../constants.js'
+import { isWebMode } from '../../vscodeApi.js'
 
 interface ToolOverlayProps {
   officeState: OfficeState
@@ -40,6 +41,8 @@ function getActivityText(
   return 'Idle'
 }
 
+const NOTIFICATION_DURATION_MS = 4000 // auto-dismiss after 4 seconds
+
 export function ToolOverlay({
   officeState,
   agents,
@@ -60,6 +63,26 @@ export function ToolOverlay({
     rafId = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafId)
   }, [])
+
+  // Track recent activity per agent for notification-style display
+  // Maps agentId → { lastStatus, timestamp }
+  const activityRef = useRef<Map<number, { status: string; ts: number }>>(new Map())
+
+  // Detect status changes and record timestamps
+  for (const id of agents) {
+    const tools = agentTools[id]
+    const activeTool = tools ? [...tools].reverse().find((t) => !t.done) : null
+    const currentStatus = activeTool?.status || ''
+    const prev = activityRef.current.get(id)
+
+    if (currentStatus && currentStatus !== prev?.status) {
+      activityRef.current.set(id, { status: currentStatus, ts: Date.now() })
+    }
+    // Clear when no active tools and notification expired
+    if (!currentStatus && prev && Date.now() - prev.ts > NOTIFICATION_DURATION_MS) {
+      activityRef.current.delete(id)
+    }
+  }
 
   const el = containerRef.current
   if (!el) return null
@@ -89,8 +112,22 @@ export function ToolOverlay({
         const isHovered = hoveredId === id
         const isSub = ch.isSubagent
 
-        // Only show for hovered or selected agents
-        if (!isSelected && !isHovered) return null
+        // In web mode: show as notification when status recently changed
+        // Always show for hovered/selected (original behavior)
+        const recentActivity = activityRef.current.get(id)
+        const hasNotification = isWebMode && recentActivity && (Date.now() - recentActivity.ts < NOTIFICATION_DURATION_MS)
+        const shouldShow = isSelected || isHovered || hasNotification
+        if (!shouldShow) return null
+
+        // Fade out in the last second of notification
+        let notifOpacity = 1
+        if (hasNotification && !isSelected && !isHovered) {
+          const elapsed = Date.now() - recentActivity.ts
+          const fadeStart = NOTIFICATION_DURATION_MS - 1000
+          if (elapsed > fadeStart) {
+            notifOpacity = 1 - (elapsed - fadeStart) / 1000
+          }
+        }
 
         // Position above character
         const sittingOffset = ch.state === CharacterState.TYPE ? CHARACTER_SITTING_OFFSET_PX : 0
@@ -137,6 +174,8 @@ export function ToolOverlay({
               alignItems: 'center',
               pointerEvents: isSelected ? 'auto' : 'none',
               zIndex: isSelected ? 'var(--pixel-overlay-selected-z)' : 'var(--pixel-overlay-z)',
+              opacity: notifOpacity,
+              transition: 'opacity 0.3s ease',
             }}
           >
             <div
@@ -178,7 +217,7 @@ export function ToolOverlay({
               >
                 {activityText}
               </span>
-              {isSelected && !isSub && (
+              {isSelected && !isSub && !isWebMode && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation()

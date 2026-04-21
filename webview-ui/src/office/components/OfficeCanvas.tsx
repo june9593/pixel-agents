@@ -4,8 +4,8 @@ import type { EditorState } from '../editor/editorState.js'
 import type { EditorRenderState, SelectionRenderState, DeleteButtonBounds, RotateButtonBounds } from '../engine/renderer.js'
 import { startGameLoop } from '../engine/gameLoop.js'
 import { renderFrame } from '../engine/renderer.js'
-import { TILE_SIZE, EditTool } from '../types.js'
-import { CAMERA_FOLLOW_LERP, CAMERA_FOLLOW_SNAP_THRESHOLD, ZOOM_MIN, ZOOM_MAX, ZOOM_SCROLL_THRESHOLD, PAN_MARGIN_FRACTION } from '../../constants.js'
+import { TILE_SIZE, EditTool, CharacterState, Direction } from '../types.js'
+import { CAMERA_FOLLOW_LERP, CAMERA_FOLLOW_SNAP_THRESHOLD, ZOOM_MIN, ZOOM_MAX, ZOOM_SCROLL_THRESHOLD, PAN_MARGIN_FRACTION, GHOST_BORDER_DISABLED } from '../../constants.js'
 import { getCatalogEntry, isRotatable } from '../layout/furnitureCatalog.js'
 import { canPlaceFurniture, getWallPlacementRow } from '../editor/editorActions.js'
 import { vscode } from '../../vscodeApi.js'
@@ -113,8 +113,8 @@ export function OfficeCanvas({ officeState, onClick, isEditMode, editorState, on
             deleteButtonBounds: null,
             rotateButtonBounds: null,
             showGhostBorder,
-            ghostBorderHoverCol: showGhostBorder ? editorState.ghostCol : -999,
-            ghostBorderHoverRow: showGhostBorder ? editorState.ghostRow : -999,
+            ghostBorderHoverCol: showGhostBorder ? editorState.ghostCol : GHOST_BORDER_DISABLED,
+            ghostBorderHoverRow: showGhostBorder ? editorState.ghostRow : GHOST_BORDER_DISABLED,
           }
 
           // Ghost preview for furniture placement
@@ -393,7 +393,24 @@ export function OfficeCanvas({ officeState, onClick, isEditMode, editorState, on
         }
         canvas.style.cursor = cursor
       }
+      // Restore direction of previously hovered character
+      const prevHovered = officeState.hoveredAgentId
+      if (prevHovered !== null && prevHovered !== hitId) {
+        const prevCh = officeState.characters.get(prevHovered)
+        if (prevCh && prevCh._savedDir !== undefined) {
+          prevCh.dir = prevCh._savedDir
+          prevCh._savedDir = undefined
+        }
+      }
       officeState.hoveredAgentId = hitId
+      // When hovering an idle/typing character, make them turn to face the viewer
+      if (hitId !== null) {
+        const ch = officeState.characters.get(hitId)
+        if (ch && ch.state !== CharacterState.WALK && ch._savedDir === undefined) {
+          ch._savedDir = ch.dir
+          ch.dir = Direction.DOWN
+        }
+      }
     },
     [officeState, screenToWorld, screenToTile, isEditMode, editorState, onEditorTileAction, onEditorEraseAction, panRef, hitTestDeleteButton, hitTestRotateButton, clampPan],
   )
