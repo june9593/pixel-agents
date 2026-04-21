@@ -122,7 +122,15 @@ export interface OpenClawGatewayOptions {
   instanceId?: string
   /** Override client.version. Default '1.0.0'. */
   clientVersion?: string
-  /** Scopes requested in connect. Default ['operator.read']. */
+  /**
+   * Scopes requested in connect. Default `['operator.read', 'operator.admin']`.
+   *
+   * `operator.admin` is required for `sessions.messages.subscribe`, which is
+   * pixel-kosmos's core data path — without it, the gateway accepts the
+   * connection but rejects the subscribe with `INVALID_REQUEST missing
+   * scope: operator.admin`. Override only if you have a strict read-only
+   * use case that doesn't need session message events.
+   */
   scopes?: string[]
   /** Per-request timeout in ms. Default 30s. */
   requestTimeoutMs?: number
@@ -260,7 +268,7 @@ export class OpenClawGateway extends EventEmitter {
       clientMode: options.clientMode ?? GATEWAY_CLIENT_MODES.BACKEND,
       instanceId: options.instanceId ?? `pixel-kosmos-${randomUUID()}`,
       clientVersion: options.clientVersion ?? '1.0.0',
-      scopes: options.scopes ?? ['operator.read'],
+      scopes: options.scopes ?? ['operator.read', 'operator.admin'],
       requestTimeoutMs: options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS,
       challengeTimeoutMs: options.challengeTimeoutMs ?? CONNECT_CHALLENGE_TIMEOUT_MS,
       reconnectMinMs: options.reconnectMinMs ?? INITIAL_BACKOFF_MS,
