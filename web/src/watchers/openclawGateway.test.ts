@@ -211,7 +211,7 @@ test('happy path: challenge → connect → hello-ok → open', async () => {
     assert.equal(req.params.minProtocol, 3)
     assert.equal(req.params.maxProtocol, 3)
     assert.equal(req.params.role, 'operator')
-    assert.deepEqual(req.params.scopes, ['operator.read'])
+    assert.deepEqual(req.params.scopes, ['operator.read', 'operator.admin'])
     assert.equal(req.params.auth.token, 'test-token')
     assert.equal(req.params.client.id, 'test')
     assert.equal(req.params.client.mode, 'backend')
@@ -266,6 +266,53 @@ test('connect req: configured clientMode is forwarded into client.mode (defaults
     assert.ok(receivedConnect)
     const req: ConnectReq = receivedConnect
     assert.equal(req.params.client.mode, 'node')
+  } finally {
+    gw.stop()
+    await server.close()
+  }
+})
+
+test('connect req: default scopes include operator.admin (regression for YUE-89)', async () => {
+  // Real gateway rejects sessions.messages.subscribe with
+  // `INVALID_REQUEST missing scope: operator.admin` if scopes is just
+  // ['operator.read']. Subscribe is pixel-kosmos's core path → admin must
+  // be in the default. Override is still respected.
+  let receivedConnect: ConnectReq | null = null
+  const server = await startFakeGateway({
+    onConnect: (req, ws) => {
+      receivedConnect = req
+      ws.send(JSON.stringify({ type: 'res', id: req.id, ok: true, payload: STOCK_HELLO_OK }))
+    },
+  })
+  const gw = makeGateway(server.url) // no scopes override → defaults
+  try {
+    gw.start()
+    await waitForEvent(gw, 'open')
+    assert.ok(receivedConnect)
+    const req: ConnectReq = receivedConnect
+    assert.ok(req.params.scopes.includes('operator.admin'), 'admin must be in default scopes')
+    assert.ok(req.params.scopes.includes('operator.read'), 'read must remain in default scopes')
+  } finally {
+    gw.stop()
+    await server.close()
+  }
+})
+
+test('connect req: caller can override scopes (e.g. read-only mode)', async () => {
+  let receivedConnect: ConnectReq | null = null
+  const server = await startFakeGateway({
+    onConnect: (req, ws) => {
+      receivedConnect = req
+      ws.send(JSON.stringify({ type: 'res', id: req.id, ok: true, payload: STOCK_HELLO_OK }))
+    },
+  })
+  const gw = makeGateway(server.url, { scopes: ['operator.read'] })
+  try {
+    gw.start()
+    await waitForEvent(gw, 'open')
+    assert.ok(receivedConnect)
+    const req: ConnectReq = receivedConnect
+    assert.deepEqual(req.params.scopes, ['operator.read'])
   } finally {
     gw.stop()
     await server.close()
