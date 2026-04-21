@@ -230,5 +230,5 @@ After `hello-ok`, switch silence threshold to `policy.tickIntervalMs * 2`.
 ## 8. Testing strategy
 
 - **Unit tests**: mock WebSocket server (e.g., `ws` package's `Server`) that emits real frame shapes — challenge, hello-ok, session.message events. Assert client sends correct envelope shapes.
-- **Live capture for fixtures**: June will SSH-tunnel to korea-vm gateway (`ssh -L 18799:127.0.0.1:18789 -N korea-vm`) and run a small capture script that connects, calls `chat.history`, subscribes to `sessions.messages`, and dumps real JSON payloads to `web/__fixtures__/openclaw/`. Done in B-v3-3 prep.
-- **End-to-end**: B-v3-4. Run `pixel-kosmos --openclaw-url ws://127.0.0.1:18799 --openclaw-token <token>` against the live tunnel and verify pixel characters animate from real session activity.
+- **Live capture for fixtures**: NOT NEEDED. Fixtures are synthesized from protocol-schema shape with anonymous IDs (project is open source — no real user data may enter the repo). Developer may ad-hoc dump real payloads locally for spot-checking shape, but those captures stay outside the repo.
+- **End-to-end**: B-v3-4. Run `pixel-kosmos --openclaw-url ws://127.0.0.1:18789 --openclaw-token <token>` against the live tunnel and verify pixel characters animate from real session activity.

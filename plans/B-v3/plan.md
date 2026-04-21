@@ -68,8 +68,8 @@ Companion to `plans/B-v3/spec.md`. Decomposes the rewrite into 4 sub-tasks, one 
 **Files touched:**
 - `web/src/watchers/openclawTranslator.ts` (full rewrite)
 - `web/src/watchers/openclawTranslator.test.ts` (full rewrite)
-- `web/__fixtures__/openclaw/*.json` (DELETE all 5 existing files, replace with captures)
-- `web/__fixtures__/openclaw/README.md` (document where each capture came from)
+- `web/__fixtures__/openclaw/*.json` (DELETE all 5 existing files, replace with synthesized fixtures)
+- `web/__fixtures__/openclaw/README.md` (document fixture variants)
 
 **Deliverables:**
 1. Translator function: `translateSessionMessage(payload: SessionMessageEvent): PixelMessage | null` — return `null` for messages we should skip (system/silent rows).
@@ -77,18 +77,26 @@ Companion to `plans/B-v3/spec.md`. Decomposes the rewrite into 4 sub-tasks, one 
 3. Map message roles: `user` / `assistant` / `tool` / `system` to our existing `PixelMessage` shape.
 4. Handle the display-normalization the server already does: don't re-strip `<tool_call>` etc.
 
-**Live Capture (prerequisite, June does this manually):**
-1. Establish tunnel: `ssh -L 18799:127.0.0.1:18789 -N korea-vm` (background)
-2. Run `web/scripts/capture-openclaw.ts` (NEW small script — write as part of this issue) that:
-   - Connects via the new B-v3-1 gateway
-   - Calls `chat.history` for each active session, dumps to `web/__fixtures__/openclaw/chat-history-<sessionKey>.json`
-   - Subscribes to `sessions.messages.subscribe`, captures next 10 events to `web/__fixtures__/openclaw/event-<n>.json`
-3. Sanitize captures (redact secrets/PII) and commit.
+**Fixtures (synthesized, NOT real captures):**
+
+This project is open source. Fixtures must run on any contributor's machine and must contain ZERO real user data, IDs, or tokens. Build fixtures by:
+
+1. Read OpenClaw protocol schema (`/tmp/openclaw-src/src/gateway/protocol/schema/sessions.ts`) to derive authoritative shapes.
+2. Hand-author one fixture per structural variant the translator must handle:
+   - `text-only.json` — single text content block
+   - `multi-block.json` — multiple blocks in one message
+   - `tool-use.json` — assistant `tool_use` block
+   - `tool-result.json` — `tool_result` block
+   - `mixed-with-thinking.json` — `thinking` + text + tool_use
+   - `multi-turn.json` — full user→assistant→tool→assistant trace
+   - Edge cases: empty content array, missing optional fields, very long text
+3. Use anonymous IDs only: `agent:demo:main`, `discord:channel:00000000`, `wechat:user-anon`, generic display names like `"Demo User"`. No real session keys, channel IDs, or conversation content.
+4. If you (developer) want to spot-check shape against your own OpenClaw, do it locally and ad hoc — DO NOT add a capture script to the repo.
 
 **Acceptance criteria:**
 - `cd web && npm test -- openclawTranslator` passes (≥1 test per fixture, asserting `PixelMessage` shape).
-- All fixtures are real captures, not synthesized.
-- README.md in fixtures dir documents capture source + sanitization.
+- All fixtures are synthesized with anonymous IDs; no real user data anywhere.
+- README.md in fixtures dir documents which structural variant each fixture covers.
 
 ---
 
@@ -99,10 +107,10 @@ Companion to `plans/B-v3/spec.md`. Decomposes the rewrite into 4 sub-tasks, one 
 **Files touched:** `plans/B-v3/verify.md` (new — capture results)
 
 **Deliverables:**
-1. June establishes SSH tunnel to korea-vm.
+1. Developer establishes SSH tunnel to their OpenClaw host.
 2. `cd web && npm run build && npm pack` — produces `pixel-kosmos-1.x.x.tgz`.
 3. Install: `npm i -g ./pixel-kosmos-1.x.x.tgz`.
-4. Run: `pixel-kosmos --openclaw-url ws://127.0.0.1:18799 --openclaw-token "1q23l*yc45j*" --kosmos-dir ""` (suppress kosmos source).
+4. Run: `pixel-kosmos --openclaw-url ws://127.0.0.1:18789 --openclaw-token "$OPENCLAW_TOKEN" --kosmos-dir ""` (suppress kosmos source).
 5. Open browser, verify pixel characters render and animate based on live OpenClaw session activity.
 6. Test reconnect: kill SSH tunnel for 30s, restore, verify watcher reconnects.
 7. Test auth failure: run with wrong token, verify clear error message and no infinite reconnect loop.
