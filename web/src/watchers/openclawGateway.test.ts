@@ -28,6 +28,7 @@ import assert from 'node:assert/strict'
 import { WebSocketServer, WebSocket } from 'ws'
 import {
   OpenClawGateway,
+  GATEWAY_CLIENT_IDS,
   GatewayRequestError,
   type AuthFailure,
   type GatewayEvent,
@@ -171,6 +172,7 @@ function makeGateway(url: string, overrides: Partial<ConstructorParameters<typeo
   return new OpenClawGateway({
     url,
     token: 'test-token',
+    clientId: GATEWAY_CLIENT_IDS.TEST,
     requestTimeoutMs: 500,
     challengeTimeoutMs: 500,
     reconnectMinMs: 50,
@@ -210,8 +212,34 @@ test('happy path: challenge → connect → hello-ok → open', async () => {
     assert.equal(req.params.role, 'operator')
     assert.deepEqual(req.params.scopes, ['operator.read'])
     assert.equal(req.params.auth.token, 'test-token')
-    assert.equal(req.params.client.id, 'pixel-kosmos')
+    assert.equal(req.params.client.id, 'test')
     assert.ok(req.params.client.instanceId.length > 0)
+  } finally {
+    gw.stop()
+    await server.close()
+  }
+})
+
+test('connect req: configured clientId is forwarded into client.id', async () => {
+  // Regression for YUE-87: previously the gateway defaulted clientId to
+  // 'pixel-kosmos', which is NOT in OpenClaw's GATEWAY_CLIENT_IDS enum and
+  // would be rejected by a real gateway. clientId is now a required typed
+  // option; this test pins that whatever the caller passes is what hits
+  // the wire.
+  let receivedConnect: ConnectReq | null = null
+  const server = await startFakeGateway({
+    onConnect: (req, ws) => {
+      receivedConnect = req
+      ws.send(JSON.stringify({ type: 'res', id: req.id, ok: true, payload: STOCK_HELLO_OK }))
+    },
+  })
+  const gw = makeGateway(server.url, { clientId: GATEWAY_CLIENT_IDS.GATEWAY_CLIENT })
+  try {
+    gw.start()
+    await waitForEvent(gw, 'open')
+    assert.ok(receivedConnect)
+    const req: ConnectReq = receivedConnect
+    assert.equal(req.params.client.id, 'gateway-client')
   } finally {
     gw.stop()
     await server.close()

@@ -21,7 +21,7 @@ import os from 'os'
 import { fileURLToPath } from 'url'
 import { KosmosWatcher } from './kosmosWatcher.js'
 import { OpenClawWatcher } from './watchers/openclawWatcher.js'
-import { OpenClawGateway } from './watchers/openclawGateway.js'
+import { OpenClawGateway, GATEWAY_CLIENT_IDS } from './watchers/openclawGateway.js'
 import { WatcherRegistry, type SourcedMessage } from './watchers/registry.js'
 import type { AgentWatcher } from './watchers/types.js'
 import { loadAllAssets, type AllAssets } from './webAssetLoader.js'
@@ -387,6 +387,7 @@ if (wantOpenClaw) {
   const gateway = new OpenClawGateway({
     url: OPENCLAW_URL,
     token: OPENCLAW_TOKEN,
+    clientId: GATEWAY_CLIENT_IDS.GATEWAY_CLIENT,
   })
   // Allocate openclaw agent ids in 10000+ to never collide with kosmos.
   const ocWatcher = new OpenClawWatcher({ gateway, idBase: 10000 })
