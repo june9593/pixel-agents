@@ -252,3 +252,153 @@ export function parseChatHistoryResponse(res: ChatHistoryResponse | unknown): An
   }
   return out
 }
+
+// ── YUE-94: health event + session-activity helpers ────────────────────
+//
+// These helpers translate the deployed OpenClaw Gateway's `health` event
+// (and the on-demand `sessions.list` RPC) into structures consumed by the
+// watcher. They are pure (no I/O, no side effects beyond an idempotent
+// console.warn for malformed agents) so the watcher can be tested with
+// fixture-driven assertions.
+
+/** One entry from `health.payload.agents[]`. */
+export interface HealthAgent {
+  agentId: string
+  name: string
+  isDefault?: boolean
+  sessions?: { recent?: SessionRecent[] }
+}
+
+/** One entry from either `health.payload.sessions.recent[]` or
+ *  `health.payload.agents[i].sessions.recent[]`. */
+export interface SessionRecent {
+  key: string
+  updatedAt: number
+  age?: number
+}
+
+/** Flattened per-session record — one PixelAgent will be created per record. */
+export interface HealthSessionRecord {
+  sessionKey: string
+  agentId: string
+  /** Owning agent's name with leading emoji (if any) stripped + trimmed. */
+  agentName: string
+  /** Leading emoji codepoint extracted from agent.name, or DEFAULT_AGENT_EMOJI. */
+  emoji: string
+  updatedAt: number
+}
+
+const DEFAULT_AGENT_EMOJI = '🦾'
+// Match a single Extended_Pictographic codepoint at the very start, optionally
+// followed by skin-tone modifiers / variation selectors / ZWJ sequences. We
+// keep this conservative — a single base + optional modifiers, no full grapheme
+// cluster parsing. Sufficient for typical agent names like "🌟 Demo" / "🤖 Bot".
+const LEADING_EMOJI_RE = /^(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic}|\p{Emoji_Modifier})*)\s*/u
+
+function splitEmojiAndName(rawName: string): { emoji: string; name: string } {
+  const m = rawName.match(LEADING_EMOJI_RE)
+  if (m) {
+    const emoji = m[1]
+    const rest = rawName.slice(m[0].length).trim()
+    return { emoji, name: rest.length > 0 ? rest : rawName.trim() }
+  }
+  return { emoji: DEFAULT_AGENT_EMOJI, name: rawName.trim() }
+}
+
+/**
+ * Flatten `health.agents[].sessions.recent[]` into one record per session.
+ *
+ * Decision (locked 2026-04-21): 1 OpenClaw session ↔ 1 PixelAgent. Each
+ * session inherits its owning agent's name + emoji. Agents with empty/
+ * whitespace-only `name` are skipped + warned (they cannot be displayed
+ * meaningfully — the watcher should bootstrap such agents from
+ * `agents.list` instead).
+ */
+export function translateHealthSessions(
+  health: { agents?: HealthAgent[] } | null | undefined,
+): HealthSessionRecord[] {
+  const out: HealthSessionRecord[] = []
+  if (!health || typeof health !== 'object') return out
+  const agents = Array.isArray(health.agents) ? health.agents : []
+  for (const agent of agents) {
+    if (!agent || typeof agent !== 'object') continue
+    if (typeof agent.agentId !== 'string' || agent.agentId.length === 0) continue
+    const rawName = typeof agent.name === 'string' ? agent.name : ''
+    if (rawName.trim().length === 0) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[openclawTranslator] skipping agent with empty name (agentId=${agent.agentId})`,
+      )
+      continue
+    }
+    const { emoji, name: agentName } = splitEmojiAndName(rawName)
+    const recent = agent.sessions?.recent
+    if (!Array.isArray(recent)) continue
+    for (const sess of recent) {
+      if (!sess || typeof sess !== 'object') continue
+      if (typeof sess.key !== 'string' || sess.key.length === 0) continue
+      if (typeof sess.updatedAt !== 'number' || !Number.isFinite(sess.updatedAt)) continue
+      out.push({
+        sessionKey: sess.key,
+        agentId: agent.agentId,
+        agentName,
+        emoji,
+        updatedAt: sess.updatedAt,
+      })
+    }
+  }
+  return out
+}
+
+/**
+ * Pure diff between two snapshots of session activity.
+ *
+ *   appeared    — keys in `next` but not in `prev`
+ *   disappeared — keys in `prev` but not in `next`
+ *   advanced    — keys in both, where `next.updatedAt > prev.updatedAt`
+ *                 (equal updatedAt is NOT advanced; lower updatedAt is NOT
+ *                 advanced — server clock regressions are ignored.)
+ */
+export function diffSessionActivity(
+  prev: ReadonlyMap<string, number>,
+  next: ReadonlyArray<{ key: string; updatedAt: number }>,
+): { appeared: string[]; disappeared: string[]; advanced: string[] } {
+  const appeared: string[] = []
+  const advanced: string[] = []
+  const seen = new Set<string>()
+  for (const entry of next) {
+    if (!entry || typeof entry.key !== 'string') continue
+    seen.add(entry.key)
+    const prior = prev.get(entry.key)
+    if (prior === undefined) {
+      appeared.push(entry.key)
+    } else if (entry.updatedAt > prior) {
+      advanced.push(entry.key)
+    }
+  }
+  const disappeared: string[] = []
+  for (const key of prev.keys()) {
+    if (!seen.has(key)) disappeared.push(key)
+  }
+  return { appeared, disappeared, advanced }
+}
+
+/**
+ * Build a session's display name.
+ *
+ * Priority:
+ *   1. Non-empty `label` (from `sessions.list[].label`) — return as-is.
+ *   2. `<agentBaseName> · <last segment of sessionKey>`. The "last segment"
+ *      is the substring after the final `:`; if there is no `:`, the whole
+ *      sessionKey is used.
+ */
+export function buildSessionDisplayName(
+  agentBaseName: string,
+  sessionKey: string,
+  label?: string,
+): string {
+  if (typeof label === 'string' && label.trim().length > 0) return label
+  const idx = sessionKey.lastIndexOf(':')
+  const suffix = idx >= 0 ? sessionKey.slice(idx + 1) : sessionKey
+  return `${agentBaseName} · ${suffix}`
+}
