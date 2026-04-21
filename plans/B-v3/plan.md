@@ -82,12 +82,14 @@ Companion to `plans/B-v3/spec.md`. Decomposes the rewrite into 4 sub-tasks, one 
 This project is open source. Fixtures must run on any contributor's machine and must contain ZERO real user data, IDs, or tokens. Build fixtures by:
 
 1. Read OpenClaw protocol schema (`/tmp/openclaw-src/src/gateway/protocol/schema/sessions.ts`) to derive authoritative shapes.
-2. Hand-author one fixture per structural variant the translator must handle:
+2. Hand-author one fixture per structural variant the translator must handle. Currently shipped (cover the core variants):
    - `text-only.json` — single text content block
-   - `multi-block.json` — multiple blocks in one message
    - `tool-use.json` — assistant `tool_use` block
-   - `tool-result.json` — `tool_result` block
-   - `mixed-with-thinking.json` — `thinking` + text + tool_use
+   - `tool-result.json` — assistant `tool_use` + matching user `tool_result`
+   - `multi-block.json` — multiple blocks (text + multiple `tool_use`) in one message
+   - `mixed-with-thinking.json` — `thinking` block + text (must ignore thinking)
+
+   Future hardening (add when a real bug or behavior gap motivates it):
    - `multi-turn.json` — full user→assistant→tool→assistant trace
    - Edge cases: empty content array, missing optional fields, very long text
 3. Use anonymous IDs only: `agent:demo:main`, `discord:channel:00000000`, `wechat:user-anon`, generic display names like `"Demo User"`. No real session keys, channel IDs, or conversation content.
