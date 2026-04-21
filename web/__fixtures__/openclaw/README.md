@@ -1,9 +1,23 @@
 # OpenClaw fixtures
 
-Captured/synthesized representative `chat.history` responses from an OpenClaw
-Gateway. The gateway protocol returns Anthropic-style messages with `role` and
+**Synthesized** representative `chat.history` responses, hand-authored to match
+the OpenClaw Gateway protocol shape. We do **not** commit real captures —
+this is an open-source repo and real captures contain user-specific session
+keys, agent IDs, and conversation content.
+
+The gateway protocol returns Anthropic-style messages with `role` and
 `content` (string or array of typed blocks: `text`, `tool_use`, `tool_result`,
-`thinking`).
+`thinking`). All IDs in fixtures are anonymous (`toolu_01ABCxyz`,
+`toolu_LIST_01`, etc.); all conversation content is generic.
+
+## Adding a new fixture
+
+1. Identify the protocol-shape variant you need to cover (see schema reference
+   below).
+2. Hand-write a JSON file with the literal `{ messages, thinkingLevel? }` shape.
+3. Use anonymous tool IDs and generic content — never paste real captures.
+4. Add a test in `web/src/watchers/openclawTranslator.test.ts` that loads the
+   fixture and asserts the expected `PixelMessage[]` output.
 
 Source of truth for the message shape: `~/tmp_openclaw/src/tui/tui-formatters.ts`
 (see `extractContentFromMessage`, `extractTextBlocks`, and the `assistant`
