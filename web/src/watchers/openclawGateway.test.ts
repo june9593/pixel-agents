@@ -29,6 +29,7 @@ import { WebSocketServer, WebSocket } from 'ws'
 import {
   OpenClawGateway,
   GATEWAY_CLIENT_IDS,
+  GATEWAY_CLIENT_MODES,
   GatewayRequestError,
   type AuthFailure,
   type GatewayEvent,
@@ -213,6 +214,7 @@ test('happy path: challenge → connect → hello-ok → open', async () => {
     assert.deepEqual(req.params.scopes, ['operator.read'])
     assert.equal(req.params.auth.token, 'test-token')
     assert.equal(req.params.client.id, 'test')
+    assert.equal(req.params.client.mode, 'backend')
     assert.ok(req.params.client.instanceId.length > 0)
   } finally {
     gw.stop()
@@ -240,6 +242,30 @@ test('connect req: configured clientId is forwarded into client.id', async () =>
     assert.ok(receivedConnect)
     const req: ConnectReq = receivedConnect
     assert.equal(req.params.client.id, 'gateway-client')
+  } finally {
+    gw.stop()
+    await server.close()
+  }
+})
+
+test('connect req: configured clientMode is forwarded into client.mode (defaults to backend)', async () => {
+  // Regression for YUE-88: previously hardcoded `mode: 'ui'`, which is
+  // semantically wrong for a Node-side observer and could fail mode-based
+  // authorization. Default is now 'backend'; test also verifies override.
+  let receivedConnect: ConnectReq | null = null
+  const server = await startFakeGateway({
+    onConnect: (req, ws) => {
+      receivedConnect = req
+      ws.send(JSON.stringify({ type: 'res', id: req.id, ok: true, payload: STOCK_HELLO_OK }))
+    },
+  })
+  const gw = makeGateway(server.url, { clientMode: GATEWAY_CLIENT_MODES.NODE })
+  try {
+    gw.start()
+    await waitForEvent(gw, 'open')
+    assert.ok(receivedConnect)
+    const req: ConnectReq = receivedConnect
+    assert.equal(req.params.client.mode, 'node')
   } finally {
     gw.stop()
     await server.close()
