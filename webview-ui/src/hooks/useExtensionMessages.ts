@@ -44,7 +44,7 @@ export interface ExtensionMessageState {
   subagentCharacters: SubagentCharacter[]
   layoutReady: boolean
   loadedAssets?: { catalog: FurnitureAsset[]; sprites: Record<string, string[][]> }
-  agentNames: Record<number, { name: string; emoji: string }>
+  agentNames: Record<number, { name: string; emoji: string; source?: 'kosmos' | 'openclaw' }>
 }
 
 function saveAgentSeats(os: OfficeState): void {
@@ -69,7 +69,7 @@ export function useExtensionMessages(
   const [subagentCharacters, setSubagentCharacters] = useState<SubagentCharacter[]>([])
   const [layoutReady, setLayoutReady] = useState(false)
   const [loadedAssets, setLoadedAssets] = useState<{ catalog: FurnitureAsset[]; sprites: Record<string, string[][]> } | undefined>()
-  const [agentNames, setAgentNames] = useState<Record<number, { name: string; emoji: string }>>({})
+  const [agentNames, setAgentNames] = useState<Record<number, { name: string; emoji: string; source?: 'kosmos' | 'openclaw' }>>({})
 
   // Track whether initial layout has been loaded (ref to avoid re-render)
   const layoutReadyRef = useRef(false)
@@ -364,7 +364,7 @@ export function useExtensionMessages(
         setSoundEnabled(soundOn)
       } else if (msg.type === 'kosmosAgentInfo') {
         // Custom message from web server with agent name/emoji info
-        const agentInfoList = msg.agents as Array<{ id: number; name: string; emoji: string }>
+        const agentInfoList = msg.agents as Array<{ id: number; name: string; emoji: string; source?: 'kosmos' | 'openclaw' }>
         if (Array.isArray(agentInfoList)) {
           // Cache names and apply to any existing characters
           for (const info of agentInfoList) {
@@ -377,7 +377,7 @@ export function useExtensionMessages(
           setAgentNames((prev) => {
             const next = { ...prev }
             for (const info of agentInfoList) {
-              next[info.id] = { name: info.name, emoji: info.emoji }
+              next[info.id] = { name: info.name, emoji: info.emoji, source: info.source }
             }
             return next
           })

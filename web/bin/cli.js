@@ -36,17 +36,26 @@ Usage:
   npx pixel-kosmos [options]
 
 Options:
-  --port <n>          HTTP port (default: 3210)
-  --profile <name>    kosmos-app profile name (default: auto-detect)
-  --kosmos-dir <path> Override kosmos-app data directory
-  --open              Open browser automatically after startup
-  -h, --help          Show this help and exit
-  -v, --version       Show version and exit
+  --port <n>             HTTP port (default: 3210)
+  --watch <mode>         Which agent sources to watch: claude | openclaw | all
+                         (default: auto — claude if kosmos-app present, plus openclaw if --openclaw-url given)
+  --profile <name>       kosmos-app profile name (default: auto-detect)
+  --kosmos-dir <path>    Override kosmos-app data directory (use "" to disable)
+  --openclaw-url <ws>    OpenClaw Gateway WebSocket URL (e.g. ws://host:18789)
+  --openclaw-token <t>   OpenClaw Gateway auth token (or env OPENCLAW_TOKEN)
+  --open                 Open browser automatically after startup
+  -h, --help             Show this help and exit
+  -v, --version          Show version and exit
+
+Environment:
+  OPENCLAW_URL, OPENCLAW_TOKEN — fall back values for the flags above.
 
 Examples:
   pixel-kosmos
   pixel-kosmos --port 8080 --open
   pixel-kosmos --profile myuser
+  pixel-kosmos --openclaw-url ws://localhost:18789 --openclaw-token sk-...
+  pixel-kosmos --openclaw-url ws://gw:18789 --openclaw-token sk-... --kosmos-dir ""
 `)
   process.exit(0)
 }
@@ -62,6 +71,13 @@ const port = getArg('port') || '3210'
 const profile = getArg('profile') || ''
 const autoOpen = hasFlag('open')
 
+const openclawUrl = getArg('openclaw-url') || process.env.OPENCLAW_URL || ''
+const openclawToken = getArg('openclaw-token') || process.env.OPENCLAW_TOKEN || ''
+if (openclawUrl && !openclawToken) {
+  console.error('❌ --openclaw-url requires --openclaw-token (or OPENCLAW_TOKEN env)')
+  process.exit(1)
+}
+
 // Detect kosmos-app directory
 // Detect kosmos-app directory based on OS
 function getDefaultKosmosDir() {
@@ -74,19 +90,59 @@ function getDefaultKosmosDir() {
   return path.join(os.homedir(), 'Library', 'Application Support', 'kosmos-app')
 }
 
+const explicitKosmosDir = getArg('kosmos-dir')
+// Empty string explicitly disables kosmos watching (openclaw-only mode).
+const kosmosDisabled = explicitKosmosDir === ''
 const defaultKosmosDir = getDefaultKosmosDir()
-const kosmosDir = getArg('kosmos-dir') || defaultKosmosDir
+const kosmosDir = explicitKosmosDir || defaultKosmosDir
 
-if (!fs.existsSync(kosmosDir)) {
-  console.error(`❌ kosmos-app directory not found: ${kosmosDir}`)
-  console.error(`   Make sure kosmos-app is installed.`)
-  process.exit(1)
+if (!kosmosDisabled && !fs.existsSync(kosmosDir)) {
+  if (openclawUrl) {
+    // OpenClaw is configured — kosmos is optional, just warn and continue.
+    console.warn(`⚠️  kosmos-app directory not found (${kosmosDir}); running OpenClaw-only.`)
+    process.env.KOSMOS_DISABLED = '1'
+  } else {
+    console.error(`❌ kosmos-app directory not found: ${kosmosDir}`)
+    console.error(`   Make sure kosmos-app is installed, or pass --openclaw-url.`)
+    process.exit(1)
+  }
 }
 
 // Set environment variables for the server
 process.env.PORT = port
-process.env.KOSMOS_APP_DIR = kosmosDir
-if (profile) process.env.KOSMOS_PROFILE = profile
+if (kosmosDisabled) {
+  process.env.KOSMOS_DISABLED = '1'
+} else {
+  process.env.KOSMOS_APP_DIR = kosmosDir
+  if (profile) process.env.KOSMOS_PROFILE = profile
+}
+if (openclawUrl) {
+  process.env.OPENCLAW_URL = openclawUrl
+  process.env.OPENCLAW_TOKEN = openclawToken
+}
+
+// Resolve --watch mode (default: auto-derive from what's available)
+const explicitWatch = (getArg('watch') || '').toLowerCase()
+let watchMode = explicitWatch
+if (!watchMode) {
+  if (kosmosDisabled && openclawUrl) watchMode = 'openclaw'
+  else if (kosmosDisabled) watchMode = 'openclaw'  // will fail later if no openclawUrl
+  else if (openclawUrl) watchMode = 'all'
+  else watchMode = 'claude'
+}
+if (!['claude', 'openclaw', 'all'].includes(watchMode)) {
+  console.error(`❌ --watch must be one of: claude | openclaw | all (got: ${watchMode})`)
+  process.exit(1)
+}
+if ((watchMode === 'openclaw' || watchMode === 'all') && !openclawUrl) {
+  console.error(`❌ --watch ${watchMode} requires --openclaw-url (or OPENCLAW_URL env)`)
+  process.exit(1)
+}
+if (watchMode === 'openclaw') {
+  // openclaw-only: explicitly disable kosmos even if dir exists.
+  process.env.KOSMOS_DISABLED = '1'
+}
+process.env.WATCH_MODE = watchMode
 
 // Auto-open browser after a short delay
 if (autoOpen) {

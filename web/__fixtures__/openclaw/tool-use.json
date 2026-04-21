@@ -1,0 +1,17 @@
+{
+  "messages": [
+    { "role": "user", "content": "Read the project README." },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "Reading the README now." },
+        {
+          "type": "tool_use",
+          "id": "toolu_01ABCxyz",
+          "name": "Read",
+          "input": { "path": "README.md" }
+        }
+      ]
+    }
+  ]
+}

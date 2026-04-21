@@ -1,0 +1,13 @@
+{
+  "messages": [
+    { "role": "user", "content": "Plan a refactor." },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "thinking", "thinking": "User wants a plan. I should outline steps without running tools yet." },
+        { "type": "text", "text": "Here is my plan: 1) inventory dead code, 2) extract shared helpers, 3) add tests." }
+      ]
+    }
+  ],
+  "thinkingLevel": "medium"
+}
