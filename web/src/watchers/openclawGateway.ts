@@ -76,6 +76,29 @@ export const GATEWAY_CLIENT_IDS = {
 
 export type GatewayClientId = (typeof GATEWAY_CLIENT_IDS)[keyof typeof GATEWAY_CLIENT_IDS]
 
+/**
+ * Valid client modes accepted by OpenClaw's gateway handshake.
+ * Mirrors `GATEWAY_CLIENT_MODES` from `src/gateway/protocol/client-info.ts` in
+ * the OpenClaw repo.
+ *
+ * Picking a value: pixel-kosmos is a Node-side read-only observer process,
+ * so `'backend'` is the right semantic match for production. The previous
+ * value `'ui'` was misleading — we have no user-facing UI on the gateway
+ * connection (the React webview talks to our own HTTP server, not OpenClaw
+ * directly).
+ */
+export const GATEWAY_CLIENT_MODES = {
+  WEBCHAT: 'webchat',
+  CLI: 'cli',
+  UI: 'ui',
+  BACKEND: 'backend',
+  NODE: 'node',
+  PROBE: 'probe',
+  TEST: 'test',
+} as const
+
+export type GatewayClientMode = (typeof GATEWAY_CLIENT_MODES)[keyof typeof GATEWAY_CLIENT_MODES]
+
 // ─── Public types ─────────────────────────────────────────────────────────
 
 export interface OpenClawGatewayOptions {
@@ -88,6 +111,13 @@ export interface OpenClawGatewayOptions {
    * observers and `GATEWAY_CLIENT_IDS.TEST` in tests.
    */
   clientId: GatewayClientId
+  /**
+   * Mode sent in `connect.params.client.mode`. Defaults to
+   * `GATEWAY_CLIENT_MODES.BACKEND` — the right semantic for a Node-side
+   * read-only observer (which is what pixel-kosmos is). Override only if
+   * you know your gateway expects something else (e.g. `'test'` in tests).
+   */
+  clientMode?: GatewayClientMode
   /** Override client.instanceId. Default random uuid. */
   instanceId?: string
   /** Override client.version. Default '1.0.0'. */
@@ -227,6 +257,7 @@ export class OpenClawGateway extends EventEmitter {
       url: options.url,
       token: options.token,
       clientId: options.clientId,
+      clientMode: options.clientMode ?? GATEWAY_CLIENT_MODES.BACKEND,
       instanceId: options.instanceId ?? `pixel-kosmos-${randomUUID()}`,
       clientVersion: options.clientVersion ?? '1.0.0',
       scopes: options.scopes ?? ['operator.read'],
@@ -437,7 +468,7 @@ export class OpenClawGateway extends EventEmitter {
           displayName: 'pixel-kosmos OpenClaw watcher',
           version: this.opts.clientVersion,
           platform: 'node',
-          mode: 'ui',
+          mode: this.opts.clientMode,
           instanceId: this.opts.instanceId,
         },
         role: 'operator',
