@@ -63,7 +63,12 @@ cd ../web && npm run build           # bundles server + copies webview to web/di
 Epic B introduces a `Watcher` interface in `web/src/` so multiple agent sources can coexist:
 
 - `KosmosWatcher` — current file-poll behavior
-- `OpenClawWatcher` — WebSocket client for OpenClaw Gateway (port 18789), subscribes to `sessions.messages.subscribe`, maps `session.message` events into the same internal agent-event schema
+- `OpenClawWatcher` — WebSocket client for OpenClaw Gateway. Architecture is **`health`-event driven** (deployed gateway v2026.3.3 does not implement `sessions.subscribe` / `sessions.messages.subscribe`):
+  - On `'open'`: one `sessions.list` call to refresh label cache (best-effort)
+  - On every `'health'` event: diff against tracked state via `translateHealthSessions` + `diffSessionActivity`, then per-session `chat.history` for appeared/advanced sessions (with in-flight coalescing)
+  - **1 OpenClaw session ↔ 1 PixelAgent** (decision locked 2026-04-21)
+  - Gateway requires `clientId: GATEWAY_CLIENT_IDS.GATEWAY_CLIENT` and `token`; emits `auth-failed` with no reconnect on bad creds
+  - Deployed port = `18799` on user's `korea-vm` (upstream default = `18789`)
 
 UI shows a small source badge (kosmos / openclaw) per character.
 
