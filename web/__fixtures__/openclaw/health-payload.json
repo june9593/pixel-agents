@@ -1,0 +1,102 @@
+[
+  {
+    "_variant": "single-agent-single-session",
+    "agents": [
+      {
+        "agentId": "demo",
+        "name": "🌟 Demo Agent",
+        "isDefault": true,
+        "sessions": {
+          "path": "/anonymized/sessions",
+          "count": 1,
+          "recent": [
+            { "key": "agent:demo:direct:owner", "updatedAt": 1714000000000, "age": 5000 }
+          ]
+        }
+      }
+    ],
+    "sessions": {
+      "path": "/anonymized/sessions",
+      "count": 1,
+      "recent": [
+        { "key": "agent:demo:direct:owner", "updatedAt": 1714000000000, "age": 5000 }
+      ]
+    }
+  },
+  {
+    "_variant": "single-agent-three-sessions-mixed",
+    "agents": [
+      {
+        "agentId": "demo",
+        "name": "🌟 Demo Agent",
+        "isDefault": true,
+        "sessions": {
+          "path": "/anonymized/sessions",
+          "count": 3,
+          "recent": [
+            { "key": "agent:demo:cron:abc1", "updatedAt": 1714000000000, "age": 1000 },
+            { "key": "agent:demo:cron:abc2", "updatedAt": 1714000010000, "age": 2000 },
+            { "key": "agent:demo:direct:owner", "updatedAt": 1714000020000, "age": 3000 }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "_variant": "two-agents-one-empty",
+    "agents": [
+      {
+        "agentId": "alpha",
+        "name": "🤖 Alpha Bot",
+        "isDefault": false,
+        "sessions": {
+          "path": "/anonymized/sessions",
+          "count": 2,
+          "recent": [
+            { "key": "agent:alpha:cron:zzz1", "updatedAt": 1714000100000, "age": 100 },
+            { "key": "agent:alpha:direct:owner", "updatedAt": 1714000200000, "age": 200 }
+          ]
+        }
+      },
+      {
+        "agentId": "beta",
+        "name": "Beta No Emoji",
+        "isDefault": false,
+        "sessions": {
+          "path": "/anonymized/sessions",
+          "count": 0,
+          "recent": []
+        }
+      }
+    ]
+  },
+  {
+    "_variant": "agent-with-empty-name",
+    "agents": [
+      {
+        "agentId": "ghost",
+        "name": "",
+        "isDefault": false,
+        "sessions": {
+          "path": "/anonymized/sessions",
+          "count": 1,
+          "recent": [
+            { "key": "agent:ghost:direct:owner", "updatedAt": 1714000300000, "age": 50 }
+          ]
+        }
+      },
+      {
+        "agentId": "valid",
+        "name": "✨ Valid Agent",
+        "isDefault": true,
+        "sessions": {
+          "path": "/anonymized/sessions",
+          "count": 1,
+          "recent": [
+            { "key": "agent:valid:direct:owner", "updatedAt": 1714000400000, "age": 60 }
+          ]
+        }
+      }
+    ]
+  }
+]

@@ -1,0 +1,58 @@
+[
+  {
+    "_variant": "with-labels",
+    "sessions": [
+      {
+        "key": "agent:demo:direct:owner",
+        "kind": "direct",
+        "label": "Morning standup",
+        "displayName": "Morning standup",
+        "updatedAt": 1714000000000,
+        "sessionId": "anon-sess-1",
+        "systemSent": true,
+        "inputTokens": 1234,
+        "outputTokens": 567,
+        "totalTokens": 1801,
+        "totalTokensFresh": true,
+        "modelProvider": "anon-provider",
+        "model": "anon-model-1",
+        "contextTokens": 1801
+      },
+      {
+        "key": "agent:demo:cron:abc1",
+        "kind": "cron",
+        "label": "Hourly digest",
+        "displayName": "Hourly digest",
+        "updatedAt": 1714000010000,
+        "sessionId": "anon-sess-2",
+        "systemSent": true,
+        "inputTokens": 100,
+        "outputTokens": 50,
+        "totalTokens": 150,
+        "totalTokensFresh": true,
+        "modelProvider": "anon-provider",
+        "model": "anon-model-1",
+        "contextTokens": 150
+      }
+    ]
+  },
+  {
+    "_variant": "without-labels",
+    "sessions": [
+      {
+        "key": "agent:demo:cron:noname1",
+        "kind": "cron",
+        "updatedAt": 1714000020000,
+        "sessionId": "anon-sess-3",
+        "systemSent": false,
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "totalTokensFresh": true,
+        "modelProvider": "anon-provider",
+        "model": "anon-model-1",
+        "contextTokens": 0
+      }
+    ]
+  }
+]

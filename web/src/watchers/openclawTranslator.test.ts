@@ -8,6 +8,9 @@ import {
   createOpenClawTranslationState,
   parseChatHistoryResponse,
   translateNewOpenClawMessages,
+  translateHealthSessions,
+  diffSessionActivity,
+  buildSessionDisplayName,
 } from './openclawTranslator.js'
 import type { PixelMessage } from '../logTranslator.js'
 
@@ -138,4 +141,181 @@ test('incremental: appending a new message only emits the delta', () => {
   assert.deepEqual(delta, [])
   assert.equal(state.isWaiting, false)
   assert.equal(state.processedCount, 3)
+})
+
+// ────────────────────────────────────────────────────────────────────────
+// YUE-94 helpers — translateHealthSessions / diffSessionActivity / buildSessionDisplayName
+// ────────────────────────────────────────────────────────────────────────
+
+const HEALTH = loadFixture('health-payload.json') as Array<Record<string, unknown>>
+const SESSIONS_LIST = loadFixture('sessions-list-response.json') as Array<Record<string, unknown>>
+
+test('translateHealthSessions: single agent + single session yields 1 record', () => {
+  const out = translateHealthSessions(HEALTH[0])
+  assert.equal(out.length, 1)
+  assert.equal(out[0].sessionKey, 'agent:demo:direct:owner')
+  assert.equal(out[0].agentId, 'demo')
+  assert.equal(out[0].agentName, 'Demo Agent')
+  assert.equal(out[0].emoji, '🌟')
+  assert.equal(out[0].updatedAt, 1714000000000)
+})
+
+test('translateHealthSessions: multi-session agent flattens to one record per session', () => {
+  const out = translateHealthSessions(HEALTH[1])
+  assert.equal(out.length, 3)
+  const keys = out.map((r) => r.sessionKey).sort()
+  assert.deepEqual(keys, [
+    'agent:demo:cron:abc1',
+    'agent:demo:cron:abc2',
+    'agent:demo:direct:owner',
+  ])
+  for (const r of out) {
+    assert.equal(r.agentId, 'demo')
+    assert.equal(r.emoji, '🌟')
+    assert.equal(r.agentName, 'Demo Agent')
+  }
+})
+
+test('translateHealthSessions: two agents — empty-recent agent contributes nothing; non-emoji name uses default emoji', () => {
+  const out = translateHealthSessions(HEALTH[2])
+  assert.equal(out.length, 2, 'beta has empty recent[]')
+  for (const r of out) assert.equal(r.agentId, 'alpha')
+  // alpha had emoji
+  assert.equal(out[0].emoji, '🤖')
+  assert.equal(out[0].agentName, 'Alpha Bot')
+})
+
+test('translateHealthSessions: empty agent name is skipped with warn; valid agent still emits', () => {
+  const warnings: string[] = []
+  const origWarn = console.warn
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args.map(String).join(' '))
+  }
+  try {
+    const out = translateHealthSessions(HEALTH[3])
+    assert.equal(out.length, 1, 'only "valid" agent contributes')
+    assert.equal(out[0].agentId, 'valid')
+    assert.equal(out[0].emoji, '✨')
+    assert.ok(
+      warnings.some((w) => w.includes('ghost')),
+      `expected a warning mentioning the skipped agentId "ghost"; got: ${JSON.stringify(warnings)}`,
+    )
+  } finally {
+    console.warn = origWarn
+  }
+})
+
+test('translateHealthSessions: no-emoji name keeps full name + default 🦾', () => {
+  // Build a synthetic on the fly to isolate this behaviour.
+  const out = translateHealthSessions({
+    agents: [
+      {
+        agentId: 'plain',
+        name: 'Plain Name Agent',
+        sessions: { recent: [{ key: 'agent:plain:direct:x', updatedAt: 1, age: 0 }] },
+      },
+    ],
+  })
+  assert.equal(out.length, 1)
+  assert.equal(out[0].emoji, '🦾')
+  assert.equal(out[0].agentName, 'Plain Name Agent')
+})
+
+test('translateHealthSessions: missing/empty agents array → []', () => {
+  assert.deepEqual(translateHealthSessions({}), [])
+  assert.deepEqual(translateHealthSessions({ agents: [] }), [])
+})
+
+// ── diffSessionActivity ─────────────────────────────────────────────────
+
+test('diffSessionActivity: empty prev → all entries appeared', () => {
+  const next = [
+    { key: 'a', updatedAt: 1 },
+    { key: 'b', updatedAt: 2 },
+  ]
+  const d = diffSessionActivity(new Map(), next)
+  assert.deepEqual(d.appeared.sort(), ['a', 'b'])
+  assert.deepEqual(d.disappeared, [])
+  assert.deepEqual(d.advanced, [])
+})
+
+test('diffSessionActivity: all gone → all disappeared', () => {
+  const prev = new Map([
+    ['a', 1],
+    ['b', 2],
+  ])
+  const d = diffSessionActivity(prev, [])
+  assert.deepEqual(d.appeared, [])
+  assert.deepEqual(d.disappeared.sort(), ['a', 'b'])
+  assert.deepEqual(d.advanced, [])
+})
+
+test('diffSessionActivity: mixed — advanced + unchanged + appeared + disappeared', () => {
+  const prev = new Map<string, number>([
+    ['stable', 100],
+    ['gone', 200],
+    ['advancing', 300],
+  ])
+  const next = [
+    { key: 'stable', updatedAt: 100 }, // unchanged
+    { key: 'advancing', updatedAt: 350 }, // advanced
+    { key: 'fresh', updatedAt: 400 }, // appeared
+  ]
+  const d = diffSessionActivity(prev, next)
+  assert.deepEqual(d.appeared, ['fresh'])
+  assert.deepEqual(d.disappeared, ['gone'])
+  assert.deepEqual(d.advanced, ['advancing'])
+})
+
+test('diffSessionActivity: same updatedAt is NOT advanced; lower updatedAt is NOT advanced', () => {
+  const prev = new Map<string, number>([
+    ['same', 100],
+    ['regress', 100],
+  ])
+  const next = [
+    { key: 'same', updatedAt: 100 },
+    { key: 'regress', updatedAt: 50 },
+  ]
+  const d = diffSessionActivity(prev, next)
+  assert.deepEqual(d.advanced, [])
+})
+
+// ── buildSessionDisplayName ────────────────────────────────────────────
+
+test('buildSessionDisplayName: non-empty label wins', () => {
+  assert.equal(
+    buildSessionDisplayName('Demo Agent', 'agent:demo:cron:abc1', 'Hourly digest'),
+    'Hourly digest',
+  )
+})
+
+test('buildSessionDisplayName: no label → "<agent> · <last segment>"', () => {
+  assert.equal(
+    buildSessionDisplayName('Demo Agent', 'agent:demo:cron:abc1'),
+    'Demo Agent · abc1',
+  )
+})
+
+test('buildSessionDisplayName: empty/whitespace label falls back', () => {
+  assert.equal(
+    buildSessionDisplayName('Demo Agent', 'agent:demo:cron:abc1', ''),
+    'Demo Agent · abc1',
+  )
+  assert.equal(
+    buildSessionDisplayName('Demo Agent', 'agent:demo:cron:abc1', '   '),
+    'Demo Agent · abc1',
+  )
+})
+
+test('buildSessionDisplayName: sessionKey without ":" — uses whole key as suffix', () => {
+  assert.equal(
+    buildSessionDisplayName('Demo Agent', 'rawkey'),
+    'Demo Agent · rawkey',
+  )
+})
+
+test('buildSessionDisplayName: sessions-list fixture shape integrates', () => {
+  const withLabels = SESSIONS_LIST[0] as { sessions: Array<{ key: string; label?: string }> }
+  const sess = withLabels.sessions[0]
+  assert.equal(buildSessionDisplayName('Demo', sess.key, sess.label), 'Morning standup')
 })

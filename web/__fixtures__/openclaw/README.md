@@ -36,4 +36,21 @@ follow up with a `chat.history` RPC to fetch the actual transcript.
 - `multi-block.json` — assistant message with text + multiple tool_uses in one content array
 - `mixed-with-thinking.json` — includes a `thinking` block (must be ignored)
 
-Each file is the literal `chat.history` response: `{ messages: [...], thinkingLevel?: string }`.
+Each `chat.history`-shaped file above is the literal `chat.history` response:
+`{ messages: [...], thinkingLevel?: string }`.
+
+## `health` event + `sessions.list` fixtures (YUE-94)
+
+Verified live against deployed gateway v2026.3.3 (2026-04-21). Schemas
+documented in `/tmp/openclaw-inventory.md`. Synthesized only — never real captures.
+
+- `health-payload.json` — **array** of `health.payload` variants. Each variant
+  has a `_variant` description field (ignored by code) plus `agents[]` and
+  `sessions{}`. Variants: single agent + single session; single agent + 3
+  sessions (cron + direct); two agents (one with empty `recent`); agent with
+  empty name (must be skipped + warned by translator).
+- `sessions-list-response.json` — **array** of `sessions.list` payload variants.
+  Each variant has a `_variant` field plus `sessions[]`. Variants: with `label`
+  fields populated; without `label` fields.
+
+Tests load by index, e.g. `loadFixture('health-payload.json')[0]`.
