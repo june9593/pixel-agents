@@ -146,6 +146,9 @@ const STOP_RECONNECT_NEXT_STEPS = new Set([
   'update_auth_configuration',
   'update_auth_credentials',
   'review_auth_configuration',
+  // Token-only client with no device pairing — a device-token retry would just
+  // re-send the same credentials and storm. Treat as terminal.
+  'retry_with_device_token',
 ])
 
 // ─── Implementation ───────────────────────────────────────────────────────
@@ -355,14 +358,15 @@ export class OpenClawGateway extends EventEmitter {
 
     // Response frame
     if (msg.type === 'res' && typeof msg.id === 'string') {
-      const pending = this.pending.get(msg.id)
-
       // Special case: response to our own `connect` req (id='connect-handshake').
+      // Check this BEFORE pending.get() so a future `request('connect', ...)` call
+      // (counter-allocated id) cannot collide with the handshake id.
       if (msg.id === 'connect-handshake') {
         this.handleConnectResponse(msg)
         return
       }
 
+      const pending = this.pending.get(msg.id)
       if (!pending) return
       this.pending.delete(msg.id)
       clearTimeout(pending.timer)
@@ -418,6 +422,10 @@ export class OpenClawGateway extends EventEmitter {
   }
 
   private handleConnectResponse(msg: RawFrame): void {
+    // Guard: a stray late `connect-handshake` res after we're already open
+    // must not re-fire 'open' or flip authFailed mid-session.
+    if (this.isOpen) return
+
     if (msg.ok === true && isHelloOkPayload(msg.payload)) {
       this.helloOk = msg.payload
       this.isOpen = true
