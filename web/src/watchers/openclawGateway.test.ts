@@ -4,23 +4,25 @@
  * Spins up a real `ws` server on an ephemeral port. The fake gateway implements
  * the real protocol shape from plans/B-v3/spec.md:
  *
- *   1. On WS connection, send `{type:"event", event:"connect.challenge", ...}`.
- *   2. Expect `{type:"req", id, method:"connect", params:{auth:{token}, ...}}`.
+ *   1. On WS connection, server waits silently for the client to send the
+ *      first frame.
+ *   2. Expect `{type:"req", id, method:"connect", params:{auth:{token}, ...}}`
+ *      as the FIRST frame from the client.
  *   3. Reply `{type:"res", id, ok:true, payload:{type:"hello-ok", ...}}` (or error).
  *   4. RPC: `{type:"req", id, method, params}` → `{type:"res", id, ok, payload|error}`.
  *   5. Push: `{type:"event", event, payload, seq?, stateVersion?}`.
  *
  * Coverage:
- *   - happy path: connect → challenge → connect req → hello-ok → 'open' fires
+ *   - happy path: connect (client sends connect req on open) → hello-ok → 'open' fires
  *   - request: req/res round-trip
  *   - request error: server replies ok:false → call rejects with GatewayRequestError
  *   - request timeout: no response → rejects with timeout error
- *   - event push: 'event' frame → 'event' listener fires (excluding tick/connect.challenge)
+ *   - event push: 'event' frame → 'event' listener fires (tick excluded)
  *   - tick keepalive: tick events do NOT surface to listeners
  *   - reconnect: drop socket, gateway auto-reconnects, 'reconnected' fires
  *   - auth-failed: AUTH_TOKEN_MISMATCH stops reconnect loop, 'auth-failed' fires
  *   - stop(): no leaked sockets, pending RPCs reject
- *   - challenge timeout: server never sends challenge → 'error' fires
+ *   - handshake timeout: server never replies to connect req → 'error' fires
  */
 
 import { test } from 'node:test'
@@ -63,8 +65,8 @@ interface ServerHandler {
   onConnect?: (req: ConnectReq, ws: WebSocket) => void
   /** Called when a non-connect req arrives. Default: ignore (forces caller timeout). */
   onRequest?: (req: RpcReq, ws: WebSocket) => void
-  /** If true, server does NOT send the connect.challenge event on connect. */
-  skipChallenge?: boolean
+  /** If true, server ignores the connect req entirely (used to test handshake timeout). */
+  ignoreConnect?: boolean
 }
 
 interface FakeServer {
@@ -99,6 +101,7 @@ function startFakeGateway(handler: ServerHandler = {}): Promise<FakeServer> {
       ws.on('message', (raw) => {
         const msg = JSON.parse(String(raw))
         if (msg.type === 'req' && msg.method === 'connect') {
+          if (h.ignoreConnect) return
           if (h.onConnect) {
             h.onConnect(msg as ConnectReq, ws)
           } else {
@@ -113,15 +116,7 @@ function startFakeGateway(handler: ServerHandler = {}): Promise<FakeServer> {
           h.onRequest?.(msg as RpcReq, ws)
         }
       })
-
-      // Server initiates the protocol: send connect.challenge first.
-      if (!h.skipChallenge) {
-        ws.send(JSON.stringify({
-          type: 'event',
-          event: 'connect.challenge',
-          payload: { protocol: 3, nonce: 'test-nonce' },
-        }))
-      }
+      // Per real protocol: server waits silently for client to send the first frame.
     })
 
     wss.on('listening', () => {
@@ -493,14 +488,14 @@ test('stop(): pending requests reject and no leaked sockets', async () => {
   }
 })
 
-test('challenge timeout: server never sends challenge → error fires', async () => {
-  const server = await startFakeGateway({ skipChallenge: true })
+test('handshake timeout: server never replies to connect req → error fires', async () => {
+  const server = await startFakeGateway({ ignoreConnect: true })
   const gw = makeGateway(server.url, { challengeTimeoutMs: 80 })
   try {
     const errP = waitForEvent<Error>(gw, 'error', 1000)
     gw.start()
     const err = await errP
-    assert.match(err.message, /connect\.challenge not received/)
+    assert.match(err.message, /connect-handshake response not received/)
   } finally {
     gw.stop()
     await server.close()
