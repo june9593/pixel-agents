@@ -47,13 +47,47 @@ export const PRE_HANDSHAKE_TICK_MS = 30_000
 /** Server closes idle conns with code 4000 after silence > tickIntervalMs * 2. */
 export const TICK_TIMEOUT_CLOSE_CODE = 4000
 
+// ─── Client identity (must match OpenClaw enum) ────────────────────────────
+
+/**
+ * Valid client identifiers accepted by OpenClaw's gateway handshake.
+ * Mirrors `GATEWAY_CLIENT_IDS` from `src/gateway/protocol/client-info.ts` in
+ * the OpenClaw repo. If OpenClaw adds new IDs, mirror them here too.
+ *
+ * Picking a value: pixel-kosmos is a read-only Node observer of operator
+ * sessions, so `'gateway-client'` (generic external client) is the right
+ * choice for production. Tests should use `'test'`.
+ */
+export const GATEWAY_CLIENT_IDS = {
+  WEBCHAT_UI: 'webchat-ui',
+  CONTROL_UI: 'openclaw-control-ui',
+  TUI: 'openclaw-tui',
+  WEBCHAT: 'webchat',
+  CLI: 'cli',
+  GATEWAY_CLIENT: 'gateway-client',
+  MACOS_APP: 'openclaw-macos',
+  IOS_APP: 'openclaw-ios',
+  ANDROID_APP: 'openclaw-android',
+  NODE_HOST: 'node-host',
+  TEST: 'test',
+  FINGERPRINT: 'fingerprint',
+  PROBE: 'openclaw-probe',
+} as const
+
+export type GatewayClientId = (typeof GATEWAY_CLIENT_IDS)[keyof typeof GATEWAY_CLIENT_IDS]
+
 // ─── Public types ─────────────────────────────────────────────────────────
 
 export interface OpenClawGatewayOptions {
   url: string
   token: string
-  /** Override client.id sent in connect req. Default 'pixel-kosmos'. */
-  clientId?: string
+  /**
+   * Identifier sent in `connect.params.client.id`. REQUIRED — OpenClaw
+   * rejects handshakes whose `client.id` is not in its enum, so we don't
+   * default this. Use `GATEWAY_CLIENT_IDS.GATEWAY_CLIENT` for production
+   * observers and `GATEWAY_CLIENT_IDS.TEST` in tests.
+   */
+  clientId: GatewayClientId
   /** Override client.instanceId. Default random uuid. */
   instanceId?: string
   /** Override client.version. Default '1.0.0'. */
@@ -192,7 +226,7 @@ export class OpenClawGateway extends EventEmitter {
     this.opts = {
       url: options.url,
       token: options.token,
-      clientId: options.clientId ?? 'pixel-kosmos',
+      clientId: options.clientId,
       instanceId: options.instanceId ?? `pixel-kosmos-${randomUUID()}`,
       clientVersion: options.clientVersion ?? '1.0.0',
       scopes: options.scopes ?? ['operator.read'],
