@@ -56,7 +56,7 @@ describe('validateScoreResponse', () => {
   it('rejects category score out of bounds', () => {
     const r = makeValidResponse();
     r.categories[0].score = 25;
-    assert.throws(() => validateScoreResponse(r), /0-20/);
+    assert.throws(() => validateScoreResponse(r), /integer 0-20/);
   });
 
   it('rejects mismatched overall vs sum', () => {
@@ -105,6 +105,55 @@ describe('validateScoreResponse', () => {
     const result = validateScoreResponse(r);
     assert.deepEqual(result.categories[0].evidence, ['ev1', 'ev2']);
     assert.deepEqual(result.categories[0].suggestions, ['s1', 's2', 's3']);
+  });
+
+  it('rejects NaN overall score', () => {
+    const r = makeValidResponse();
+    r.overall = NaN;
+    assert.throws(() => validateScoreResponse(r), /integer/);
+  });
+
+  it('rejects Infinity overall score', () => {
+    const r = makeValidResponse();
+    r.overall = Infinity;
+    assert.throws(() => validateScoreResponse(r), /integer/);
+  });
+
+  it('rejects non-integer overall score', () => {
+    const r = makeValidResponse();
+    r.overall = 72;
+    r.categories[0].score = 16.5;
+    assert.throws(() => validateScoreResponse(r), /integer/);
+  });
+
+  it('rejects NaN category score', () => {
+    const r = makeValidResponse();
+    r.categories[0].score = NaN;
+    assert.throws(() => validateScoreResponse(r), /integer/);
+  });
+
+  it('rejects non-string items in evidence', () => {
+    const r = makeValidResponse();
+    r.categories[0].evidence = [42 as unknown as string];
+    assert.throws(() => validateScoreResponse(r), /strings/);
+  });
+
+  it('rejects non-string items in suggestions', () => {
+    const r = makeValidResponse();
+    r.categories[0].suggestions = [null as unknown as string];
+    assert.throws(() => validateScoreResponse(r), /strings/);
+  });
+
+  it('rejects non-string items in topStrengths', () => {
+    const r = makeValidResponse();
+    r.topStrengths = [123 as unknown as string];
+    assert.throws(() => validateScoreResponse(r), /strings/);
+  });
+
+  it('rejects non-string items in topImprovements', () => {
+    const r = makeValidResponse();
+    r.topImprovements = [{} as unknown as string];
+    assert.throws(() => validateScoreResponse(r), /strings/);
   });
 });
 

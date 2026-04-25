@@ -40,8 +40,8 @@ export function validateScoreResponse(raw: unknown): ScoreResponse {
   }
   const obj = raw as Record<string, unknown>;
 
-  if (typeof obj.overall !== 'number' || obj.overall < 0 || obj.overall > 100) {
-    throw new Error('overall must be a number between 0 and 100');
+  if (!Number.isFinite(obj.overall) || !Number.isInteger(obj.overall) || (obj.overall as number) < 0 || (obj.overall as number) > 100) {
+    throw new Error('overall must be an integer between 0 and 100');
   }
 
   if (!Array.isArray(obj.categories) || obj.categories.length !== RUBRIC_CATEGORIES.length) {
@@ -55,17 +55,17 @@ export function validateScoreResponse(raw: unknown): ScoreResponse {
     if (c.category !== expectedCat) {
       throw new Error(`Category at index ${i} must be "${expectedCat}", got "${c.category}"`);
     }
-    if (typeof c.score !== 'number' || c.score < 0 || c.score > 20) {
-      throw new Error(`Score for ${expectedCat} must be 0-20`);
+    if (!Number.isFinite(c.score) || !Number.isInteger(c.score) || (c.score as number) < 0 || (c.score as number) > 20) {
+      throw new Error(`Score for ${expectedCat} must be an integer 0-20`);
     }
     if (typeof c.rationale !== 'string' || c.rationale.length === 0) {
       throw new Error(`Rationale for ${expectedCat} must be a non-empty string`);
     }
-    if (!Array.isArray(c.evidence)) {
-      throw new Error(`Evidence for ${expectedCat} must be an array`);
+    if (!Array.isArray(c.evidence) || !c.evidence.every((e: unknown) => typeof e === 'string')) {
+      throw new Error(`Evidence for ${expectedCat} must be an array of strings`);
     }
-    if (!Array.isArray(c.suggestions)) {
-      throw new Error(`Suggestions for ${expectedCat} must be an array`);
+    if (!Array.isArray(c.suggestions) || !c.suggestions.every((s: unknown) => typeof s === 'string')) {
+      throw new Error(`Suggestions for ${expectedCat} must be an array of strings`);
     }
 
     return {
@@ -88,11 +88,11 @@ export function validateScoreResponse(raw: unknown): ScoreResponse {
   if (typeof obj.summary !== 'string' || obj.summary.length === 0) {
     throw new Error('summary must be a non-empty string');
   }
-  if (!Array.isArray(obj.topStrengths) || obj.topStrengths.length === 0) {
-    throw new Error('topStrengths must be a non-empty array');
+  if (!Array.isArray(obj.topStrengths) || obj.topStrengths.length === 0 || !obj.topStrengths.every((s: unknown) => typeof s === 'string')) {
+    throw new Error('topStrengths must be a non-empty array of strings');
   }
-  if (!Array.isArray(obj.topImprovements) || obj.topImprovements.length === 0) {
-    throw new Error('topImprovements must be a non-empty array');
+  if (!Array.isArray(obj.topImprovements) || obj.topImprovements.length === 0 || !obj.topImprovements.every((s: unknown) => typeof s === 'string')) {
+    throw new Error('topImprovements must be a non-empty array of strings');
   }
 
   return {
