@@ -1,8 +1,11 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { Card } from '@/components/Card';
 import { Badge } from '@/components/Badge';
 import { ProgressBar } from '@/components/ProgressBar';
-import { mockScoreResult } from '@/lib/mock-data';
+import type { ScoreResponse } from '@/lib/scorer/types';
 import Link from 'next/link';
 
 function ScoreRing({ score, label }: { score: number; label: string }) {
@@ -29,7 +32,29 @@ function ScoreRing({ score, label }: { score: number; label: string }) {
 }
 
 export default function ScoreResultsPage() {
-  const { overall, pillars, highlights } = mockScoreResult;
+  const [result, setResult] = useState<ScoreResponse | null>(null);
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem('scoreResult');
+    if (stored) {
+      setResult(JSON.parse(stored));
+    }
+  }, []);
+
+  if (!result) {
+    return (
+      <AppShell>
+        <div className="max-w-3xl mx-auto text-center py-16">
+          <p className="text-slate-500 mb-4">No score results found. Score a resume first.</p>
+          <Link href="/score" className="text-indigo-600 hover:text-indigo-700 font-medium text-sm">
+            Go to Score page
+          </Link>
+        </div>
+      </AppShell>
+    );
+  }
+
+  const { overall, categories, summary, topStrengths, topImprovements } = result;
 
   return (
     <AppShell>
@@ -37,13 +62,13 @@ export default function ScoreResultsPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 mb-1">Score Results</h1>
-            <p className="text-slate-500 text-sm">Detailed breakdown against target job description</p>
+            <p className="text-slate-500 text-sm">Detailed breakdown by rubric category</p>
           </div>
           <Link
-            href="/optimize"
+            href="/score"
             className="inline-flex items-center px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
           >
-            Optimize this resume →
+            Score another
           </Link>
         </div>
 
@@ -51,59 +76,73 @@ export default function ScoreResultsPage() {
           <div className="flex items-center justify-center py-4">
             <ScoreRing score={overall} label="Overall Score" />
           </div>
+          <p className="text-sm text-slate-600 text-center mt-2 max-w-lg mx-auto">{summary}</p>
         </Card>
 
+        <div className="grid sm:grid-cols-2 gap-4 mb-6">
+          <Card>
+            <h3 className="text-sm font-semibold text-emerald-800 mb-3">Top Strengths</h3>
+            <ul className="space-y-2">
+              {topStrengths.map((s, i) => (
+                <li key={i} className="text-sm text-slate-700 pl-4 relative before:content-['+'] before:absolute before:left-0 before:text-emerald-500 before:font-bold">
+                  {s}
+                </li>
+              ))}
+            </ul>
+          </Card>
+          <Card>
+            <h3 className="text-sm font-semibold text-amber-800 mb-3">Top Improvements</h3>
+            <ul className="space-y-2">
+              {topImprovements.map((s, i) => (
+                <li key={i} className="text-sm text-slate-700 pl-4 relative before:content-['!'] before:absolute before:left-0 before:text-amber-500 before:font-bold">
+                  {s}
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
+
         <div className="grid gap-4 mb-6">
-          {pillars.map((pillar) => (
-            <Card key={pillar.name}>
+          {categories.map((cat) => (
+            <Card key={cat.category}>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-slate-900">{pillar.name}</h3>
-                <span className="text-sm font-bold text-slate-700 tabular-nums">{pillar.score}/{pillar.maxScore}</span>
+                <h3 className="text-sm font-semibold text-slate-900">{cat.label}</h3>
+                <span className="text-sm font-bold text-slate-700 tabular-nums">{cat.score}/{cat.maxScore}</span>
               </div>
-              <ProgressBar value={pillar.score} max={pillar.maxScore} size="sm" showLabel />
+              <ProgressBar value={cat.score} max={cat.maxScore} size="sm" showLabel />
+
+              <p className="text-sm text-slate-600 mt-3">{cat.rationale}</p>
 
               <div className="grid sm:grid-cols-2 gap-4 mt-4">
-                <div>
-                  <p className="text-xs font-medium text-emerald-700 mb-2">What helped</p>
-                  <ul className="space-y-1">
-                    {pillar.helped.map((h, i) => (
-                      <li key={i} className="text-xs text-slate-600 pl-3 relative before:content-['+'] before:absolute before:left-0 before:text-emerald-500 before:font-bold">
-                        {h}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-red-700 mb-2">What hurt</p>
-                  <ul className="space-y-1">
-                    {pillar.hurt.map((h, i) => (
-                      <li key={i} className="text-xs text-slate-600 pl-3 relative before:content-['−'] before:absolute before:left-0 before:text-red-500 before:font-bold">
-                        {h}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                {cat.evidence.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-slate-500 mb-2">Evidence</p>
+                    <ul className="space-y-1">
+                      {cat.evidence.map((e, i) => (
+                        <li key={i} className="text-xs text-slate-600 pl-3 relative">
+                          <Badge variant="info" size="sm">cite</Badge>{' '}
+                          <span className="italic">{e}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {cat.suggestions.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-amber-700 mb-2">Suggestions</p>
+                    <ul className="space-y-1">
+                      {cat.suggestions.map((s, i) => (
+                        <li key={i} className="text-xs text-slate-600 pl-3 relative before:content-['→'] before:absolute before:left-0 before:text-amber-500">
+                          {s}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </Card>
           ))}
         </div>
-
-        <Card>
-          <h3 className="text-sm font-semibold text-slate-900 mb-3">Resume Highlights</h3>
-          <div className="space-y-2">
-            {highlights.map((hl, i) => (
-              <div key={i} className="flex items-start gap-2">
-                <Badge
-                  variant={hl.type === 'positive' ? 'success' : hl.type === 'negative' ? 'error' : 'default'}
-                  size="sm"
-                >
-                  {hl.type === 'positive' ? '✓' : hl.type === 'negative' ? '✗' : '—'}
-                </Badge>
-                <span className="text-sm text-slate-700">{hl.text}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
       </div>
     </AppShell>
   );
