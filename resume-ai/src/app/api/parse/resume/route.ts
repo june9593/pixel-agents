@@ -1,7 +1,7 @@
 import { ingest } from "@/lib/ingest";
 import { parseResumeText, type LlmFn } from "@/lib/parser";
 
-export const config = { testLlm: undefined as LlmFn | undefined };
+export const routeConfig = { testLlm: undefined as LlmFn | undefined };
 
 export async function POST(request: Request) {
   const contentType = request.headers.get("content-type") ?? "";
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY;
-    const resume = await parseResumeText(rawText, config.testLlm, apiKey);
+    const resume = await parseResumeText(rawText, routeConfig.testLlm, apiKey);
     return Response.json({ resume });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Parsing failed";

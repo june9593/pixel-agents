@@ -12,17 +12,17 @@ const fakeResume: ResumeJSON = {
 
 describe("POST /api/parse/resume", () => {
   let POST: (request: Request) => Promise<Response>;
-  let routeConfig: { testLlm: unknown };
+  let rc: { testLlm: unknown };
 
   before(async () => {
     const mod = await import("../route");
     POST = mod.POST;
-    routeConfig = mod.config;
-    routeConfig.testLlm = async () => JSON.stringify(fakeResume);
+    rc = mod.routeConfig;
+    rc.testLlm = async () => JSON.stringify(fakeResume);
   });
 
   afterEach(() => {
-    routeConfig.testLlm = async () => JSON.stringify(fakeResume);
+    rc.testLlm = async () => JSON.stringify(fakeResume);
   });
 
   it("accepts JSON rawText and returns parsed resume", async () => {
